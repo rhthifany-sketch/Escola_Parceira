@@ -64,3 +64,9 @@ usersRouter.put("/:id", asyncHandler(async (req, res) => {
   });
   res.json(user);
 }));
+
+usersRouter.delete("/:id", asyncHandler(async (req, res) => {
+  if (req.params.id === req.user!.id) throw new HttpError(400, "Você não pode excluir o seu próprio usuário");
+  await prisma.user.delete({ where: { id: req.params.id } });
+  res.status(204).end();
+}));

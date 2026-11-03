@@ -56,17 +56,24 @@ studentsRouter.put("/:id", asyncHandler(async (req, res) => {
   res.json(await prisma.student.update({ where: { id: current.id }, data: { ...data, enrollmentDate: data.enrollmentDate! } }));
 }));
 
+/**
+ * Exclui de vez a criança e as faltas lançadas dela (para cadastro de teste
+ * ou feito errado). Quem saiu do programa deve ganhar data de saída, não ser
+ * excluído — senão some dos meses em que estava matriculada.
+ */
 studentsRouter.delete("/:id", asyncHandler(async (req, res) => {
-  const current = await prisma.student.findUniqueOrThrow({
-    where: { id: req.params.id },
-    include: { _count: { select: { attendances: true } } },
-  });
+  const current = await prisma.student.findUniqueOrThrow({ where: { id: req.params.id } });
   assertUnitAccess(req.user!, current.unitId);
-  if (current._count.attendances > 0) {
-    throw new HttpError(409, "Essa criança já tem faltas lançadas. Para tirar do programa, preencha a data de saída.");
-  }
   await prisma.student.delete({ where: { id: current.id } });
   res.status(204).end();
+}));
+
+studentsRouter.post("/delete-many", asyncHandler(async (req, res) => {
+  const { ids } = z.object({ ids: z.array(z.string().min(1)).min(1) }).parse(req.body);
+  const students = await prisma.student.findMany({ where: { id: { in: ids } }, select: { id: true, unitId: true } });
+  for (const s of students) assertUnitAccess(req.user!, s.unitId);
+  const { count } = await prisma.student.deleteMany({ where: { id: { in: students.map((s) => s.id) } } });
+  res.json({ deleted: count });
 }));
 
 /**

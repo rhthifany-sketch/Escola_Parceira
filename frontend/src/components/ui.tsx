@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import { useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
 import { X } from "lucide-react";
 
 const cx = (...c: (string | false | undefined)[]) => c.filter(Boolean).join(" ");
@@ -90,3 +90,66 @@ export const Th = ({ children, className }: { children?: ReactNode; className?: 
 export const Td = ({ children, className }: { children?: ReactNode; className?: string }) => (
   <td className={cx("border-b border-slate-100 px-3 py-2", className)}>{children}</td>
 );
+
+/** Botões "Editar" e "Excluir" de cada linha das tabelas de cadastro. */
+export function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete?: () => void }) {
+  return (
+    <div className="flex justify-end gap-1.5 whitespace-nowrap">
+      <button onClick={onEdit} className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
+        Editar
+      </button>
+      {onDelete && (
+        <button onClick={onDelete} className="rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-50">
+          Excluir
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Confirmação de exclusão. Com `typeToConfirm`, só libera depois de digitar
+ * o texto (para exclusões grandes, como uma unidade inteira).
+ */
+export function ConfirmDelete({
+  title,
+  children,
+  typeToConfirm,
+  busy,
+  error,
+  onConfirm,
+  onClose,
+}: {
+  title: string;
+  children: ReactNode;
+  typeToConfirm?: string;
+  busy?: boolean;
+  error?: string;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const [typed, setTyped] = useState("");
+  const ok = !typeToConfirm || typed.trim().toLowerCase() === typeToConfirm.trim().toLowerCase();
+  return (
+    <Modal title={title} onClose={onClose}>
+      <div className="flex flex-col gap-3 text-sm text-slate-700">
+        {children}
+        <p className="font-medium text-red-700">Essa exclusão não pode ser desfeita.</p>
+        {typeToConfirm && (
+          <Field label={`Para confirmar, digite: ${typeToConfirm}`}>
+            <Input value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus />
+          </Field>
+        )}
+        <Alert>{error}</Alert>
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button variant="danger" disabled={!ok || busy} onClick={onConfirm}>
+            {busy ? "Excluindo…" : "Excluir"}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}

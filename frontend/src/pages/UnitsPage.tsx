@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { api, errorMessage } from "../lib/api";
 import type { Unit } from "../lib/types";
 import { useUnits } from "../components/Pickers";
-import { Alert, Button, Card, Field, Input, Modal, PageTitle, Td, Th } from "../components/ui";
+import { Alert, Button, Card, ConfirmDelete, Field, Input, Modal, PageTitle, RowActions, Td, Th } from "../components/ui";
 
 type Form = Pick<Unit, "name" | "legalName" | "cnpj" | "legalRepName" | "legalRepCpf" | "active">;
 const empty: Form = { name: "", legalName: "", cnpj: "", legalRepName: "", legalRepCpf: "", active: true };
@@ -14,6 +14,27 @@ export function UnitsPage() {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<{ id: string | null; form: Form } | null>(null);
   const [error, setError] = useState("");
+  const [deleting, setDeleting] = useState<{ unit: Unit; usage: { students: number; months: number; users: number } } | null>(null);
+  const [message, setMessage] = useState("");
+  const remove = useMutation({
+    mutationFn: (u: Unit) => api.delete(`/units/${u.id}`),
+    onSuccess: (_r, u) => {
+      setDeleting(null);
+      setMessage(`Unidade ${u.name} excluída.`);
+      queryClient.invalidateQueries();
+    },
+    onError: (err) => setError(errorMessage(err)),
+  });
+  const askDelete = async (unit: Unit) => {
+    setError("");
+    setMessage("");
+    try {
+      const usage = (await api.get(`/units/${unit.id}/usage`)).data;
+      setDeleting({ unit, usage });
+    } catch (err) {
+      setMessage(errorMessage(err));
+    }
+  };
   const save = useMutation({
     mutationFn: async () => (editing!.id ? api.put(`/units/${editing!.id}`, editing!.form) : api.post("/units", editing!.form)),
     onSuccess: () => {
@@ -39,6 +60,7 @@ export function UnitsPage() {
           </Button>
         }
       />
+      {message && <div className="mb-4"><Alert tone="success">{message}</Alert></div>}
       <Card className="overflow-x-auto p-0">
         <table className="w-full text-sm">
           <thead>
@@ -63,20 +85,39 @@ export function UnitsPage() {
                   <div className="text-xs text-slate-500">CPF {u.legalRepCpf}</div>
                 </Td>
                 <Td className="text-right">{u._count?.students ?? 0}</Td>
-                <Td className="text-right">
-                  <button
-                    className="text-slate-500 hover:text-slate-900"
-                    aria-label="Editar"
-                    onClick={() => { setError(""); setEditing({ id: u.id, form: { ...u } }); }}
-                  >
-                    <Pencil size={16} />
-                  </button>
+                <Td>
+                  <RowActions
+                    onEdit={() => { setError(""); setEditing({ id: u.id, form: { ...u } }); }}
+                    onDelete={() => askDelete(u)}
+                  />
                 </Td>
               </tr>
             ))}
           </tbody>
         </table>
       </Card>
+      {deleting && (
+        <ConfirmDelete
+          title="Excluir unidade"
+          typeToConfirm={deleting.unit.name}
+          busy={remove.isPending}
+          error={error}
+          onClose={() => setDeleting(null)}
+          onConfirm={() => remove.mutate(deleting.unit)}
+        >
+          <p>
+            Vai excluir a unidade <strong>{deleting.unit.name}</strong> e tudo o que está ligado a ela:
+          </p>
+          <ul className="list-disc pl-5">
+            <li>{deleting.usage.students} criança(s) cadastrada(s)</li>
+            <li>{deleting.usage.months} mês(es) com frequência lançada</li>
+            <li>{deleting.usage.users} gestor(es) dessa unidade (o login deles deixa de existir)</li>
+          </ul>
+          <p className="text-slate-500">
+            Se a unidade só saiu do programa, prefira <strong>Editar</strong> e desmarcar “Unidade ativa”: assim o histórico fica guardado.
+          </p>
+        </ConfirmDelete>
+      )}
       {editing && (
         <Modal title={editing.id ? "Editar unidade" : "Nova unidade"} onClose={() => setEditing(null)}>
           <form className="grid gap-3 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>

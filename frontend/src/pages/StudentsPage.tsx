@@ -1,11 +1,11 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2, Upload } from "lucide-react";
+import { Plus, Trash2, Upload } from "lucide-react";
 import { api, errorMessage } from "../lib/api";
 import { usePeriod } from "../lib/period";
 import { formatDate, type Student } from "../lib/types";
 import { UnitPicker } from "../components/Pickers";
-import { Alert, Button, Card, Field, Input, Modal, PageTitle, Select, Td, Th } from "../components/ui";
+import { Alert, Button, Card, ConfirmDelete, Field, Input, Modal, PageTitle, RowActions, Select, Td, Th } from "../components/ui";
 
 type Form = Omit<Student, "id" | "unitId">;
 const empty: Form = {
@@ -22,6 +22,9 @@ export function StudentsPage() {
   const [editing, setEditing] = useState<{ id: string | null; form: Form } | null>(null);
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState<Student[] | null>(null);
+  const [deleteError, setDeleteError] = useState("");
 
   const { data: students, isLoading } = useQuery({
     queryKey: ["students", unitId],
@@ -48,13 +51,20 @@ export function StudentsPage() {
   });
 
   const remove = useMutation({
-    mutationFn: (s: Student) => api.delete(`/students/${s.id}`),
-    onSuccess: () => {
-      setMessage({ tone: "success", text: "Criança removida." });
+    mutationFn: (list: Student[]) =>
+      list.length === 1 ? api.delete(`/students/${list[0].id}`) : api.post("/students/delete-many", { ids: list.map((s) => s.id) }),
+    onSuccess: (_r, list) => {
+      setDeleting(null);
+      setSelected(new Set());
+      setMessage({ tone: "success", text: list.length === 1 ? `${list[0].name} foi excluída.` : `${list.length} crianças excluídas.` });
       refresh();
     },
-    onError: (err) => setMessage({ tone: "error", text: errorMessage(err) }),
+    onError: (err) => setDeleteError(errorMessage(err)),
   });
+  const askDelete = (list: Student[]) => {
+    setDeleteError("");
+    setDeleting(list);
+  };
 
   const importFile = useMutation({
     mutationFn: async (file: File) => {
@@ -77,6 +87,15 @@ export function StudentsPage() {
   const list = (students ?? []).filter(
     (s) => (showExited || !s.exitDate) && (!term || s.name.toLowerCase().includes(term) || (s.guardianName ?? "").toLowerCase().includes(term))
   );
+  const allSelected = list.length > 0 && list.every((s) => selected.has(s.id));
+  const toggle = (id: string) =>
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const selectedStudents = (students ?? []).filter((s) => selected.has(s.id));
   const field = (key: keyof Form) => ({
     value: (key.endsWith("Date") ? isoDay(editing!.form[key]) : editing!.form[key]) ?? "",
     onChange: (e: { target: { value: string } }) => setEditing((ed) => ed && { ...ed, form: { ...ed.form, [key]: e.target.value } }),
@@ -117,6 +136,11 @@ export function StudentsPage() {
         <label className="flex items-center gap-2 pb-2 text-sm text-slate-600">
           <input type="checkbox" checked={showExited} onChange={(e) => setShowExited(e.target.checked)} /> Mostrar quem saiu
         </label>
+        {selectedStudents.length > 0 && (
+          <Button variant="danger" className="ml-auto" onClick={() => askDelete(selectedStudents)}>
+            <Trash2 size={16} /> Excluir selecionadas ({selectedStudents.length})
+          </Button>
+        )}
       </div>
       {message && <div className="mb-4"><Alert tone={message.tone}>{message.text}</Alert></div>}
 
@@ -124,6 +148,14 @@ export function StudentsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr>
+              <Th className="w-8">
+                <input
+                  type="checkbox"
+                  aria-label="Selecionar todas"
+                  checked={allSelected}
+                  onChange={() => setSelected(allSelected ? new Set() : new Set(list.map((s) => s.id)))}
+                />
+              </Th>
               <Th>Criança</Th>
               <Th>GREI / Turno</Th>
               <Th>Matrícula</Th>
@@ -144,7 +176,10 @@ export function StudentsPage() {
               </tr>
             )}
             {list.map((s) => (
-              <tr key={s.id} className={s.exitDate ? "text-slate-400" : ""}>
+              <tr key={s.id} className={`${s.exitDate ? "text-slate-400" : ""} ${selected.has(s.id) ? "bg-orange-50" : ""}`}>
+                <Td>
+                  <input type="checkbox" aria-label={`Selecionar ${s.name}`} checked={selected.has(s.id)} onChange={() => toggle(s.id)} />
+                </Td>
                 <Td className="font-medium">
                   {s.name}
                   {s.exitDate && <div className="text-xs font-normal">Saiu em {formatDate(s.exitDate)}</div>}
@@ -158,27 +193,37 @@ export function StudentsPage() {
                   {s.guardianCpf && <div className="text-xs text-slate-500">CPF {s.guardianCpf}</div>}
                 </Td>
                 <Td>{s.guardianPhone ?? <span className="text-amber-700">—</span>}</Td>
-                <Td className="whitespace-nowrap text-right">
-                  <button
-                    className="mr-3 text-slate-500 hover:text-slate-900"
-                    aria-label="Editar"
-                    onClick={() => setEditing({ id: s.id, form: { ...empty, ...s } })}
-                  >
-                    <Pencil size={16} />
-                  </button>
-                  <button
-                    className="text-slate-400 hover:text-red-700"
-                    aria-label="Remover"
-                    onClick={() => confirm(`Remover ${s.name} do cadastro?`) && remove.mutate(s)}
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                <Td>
+                  <RowActions onEdit={() => setEditing({ id: s.id, form: { ...empty, ...s } })} onDelete={() => askDelete([s])} />
                 </Td>
               </tr>
             ))}
           </tbody>
         </table>
       </Card>
+
+      {deleting && (
+        <ConfirmDelete
+          title={deleting.length === 1 ? "Excluir criança" : `Excluir ${deleting.length} crianças`}
+          busy={remove.isPending}
+          error={deleteError}
+          onClose={() => setDeleting(null)}
+          onConfirm={() => remove.mutate(deleting)}
+        >
+          <p>
+            {deleting.length === 1 ? (
+              <>Vai excluir <strong>{deleting[0].name}</strong></>
+            ) : (
+              <>Vai excluir <strong>{deleting.length} crianças</strong> ({deleting.slice(0, 5).map((s) => s.name).join(", ")}{deleting.length > 5 ? "…" : ""})</>
+            )}{" "}
+            do cadastro, junto com as faltas lançadas em todos os meses.
+          </p>
+          <p className="text-slate-500">
+            Use a exclusão para cadastro de teste ou feito errado. Se a criança <strong>saiu do programa</strong>, em vez de excluir
+            clique em Editar e preencha a <strong>data de saída</strong>: assim ela continua nos anexos dos meses em que estava matriculada.
+          </p>
+        </ConfirmDelete>
+      )}
 
       {editing && (
         <Modal title={editing.id ? "Editar criança" : "Nova criança"} onClose={() => setEditing(null)}>

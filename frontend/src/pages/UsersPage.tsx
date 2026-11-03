@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { api, errorMessage } from "../lib/api";
 import type { Role } from "../lib/types";
 import { useUnits } from "../components/Pickers";
-import { Alert, Button, Card, Field, Input, Modal, PageTitle, Select, Td, Th } from "../components/ui";
+import { Alert, Button, Card, ConfirmDelete, Field, Input, Modal, PageTitle, RowActions, Select, Td, Th } from "../components/ui";
+import { useAuth } from "../lib/auth";
 
 interface UserRow {
   id: string;
@@ -23,6 +24,16 @@ export function UsersPage() {
   const { data: users } = useQuery({ queryKey: ["users"], queryFn: async () => (await api.get<UserRow[]>("/users")).data });
   const [editing, setEditing] = useState<{ id: string | null; form: Form } | null>(null);
   const [error, setError] = useState("");
+  const { user: me } = useAuth();
+  const [deleting, setDeleting] = useState<UserRow | null>(null);
+  const remove = useMutation({
+    mutationFn: (u: UserRow) => api.delete(`/users/${u.id}`),
+    onSuccess: () => {
+      setDeleting(null);
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (err) => setError(errorMessage(err)),
+  });
   const save = useMutation({
     mutationFn: async () => {
       const f = editing!.form;
@@ -70,23 +81,34 @@ export function UsersPage() {
                 <Td>{u.email}</Td>
                 <Td>{u.role === "FINANCEIRO" ? "Financeiro" : "Gestor"}</Td>
                 <Td>{u.unit?.name ?? "Todas"}</Td>
-                <Td className="text-right">
-                  <button
-                    className="text-slate-500 hover:text-slate-900"
-                    aria-label="Editar"
-                    onClick={() => {
+                <Td>
+                  <RowActions
+                    onEdit={() => {
                       setError("");
                       setEditing({ id: u.id, form: { name: u.name, email: u.email, role: u.role, unitId: u.unitId ?? "", password: "", active: u.active } });
                     }}
-                  >
-                    <Pencil size={16} />
-                  </button>
+                    onDelete={u.id === me?.id ? undefined : () => { setError(""); setDeleting(u); }}
+                  />
                 </Td>
               </tr>
             ))}
           </tbody>
         </table>
       </Card>
+      {deleting && (
+        <ConfirmDelete
+          title="Excluir usuário"
+          busy={remove.isPending}
+          error={error}
+          onClose={() => setDeleting(null)}
+          onConfirm={() => remove.mutate(deleting)}
+        >
+          <p>
+            Vai excluir o usuário <strong>{deleting.name}</strong> ({deleting.email}). Ele não consegue mais entrar no sistema. As crianças e
+            as frequências que ele lançou continuam.
+          </p>
+        </ConfirmDelete>
+      )}
       {editing && (
         <Modal title={editing.id ? "Editar usuário" : "Novo usuário"} onClose={() => setEditing(null)}>
           <form className="grid gap-3 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
