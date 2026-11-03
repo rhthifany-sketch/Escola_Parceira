@@ -32,3 +32,21 @@ export function signatureLine(doc: PDFKit.PDFDocument, label: string, name?: str
   doc.font("Helvetica").fontSize(10).text(label, x, doc.y, { width, align: "center" });
   doc.x = doc.page.margins.left;
 }
+
+/** Página de declaração (Anexos I a V): cabeçalho da prefeitura + título. */
+export function declarationPage(doc: PDFKit.PDFDocument, title: string) {
+  doc.addPage();
+  doc.image(HEADER_IMAGE, (doc.page.width - 260) / 2, 30, { width: 260 });
+  doc.y = 170;
+  doc.font("Helvetica-Bold").fontSize(12).text(title, { align: "center" });
+  doc.moveDown(2);
+  doc.font("Helvetica").fontSize(11);
+}
+
+export const paragraph = { align: "justify" as const, lineGap: 5 };
+
+/** Valor ou linha em branco para preencher à mão. */
+export const blank = (v: string | null | undefined, size = 30) => (v && v.trim() ? v.trim() : "_".repeat(size));
+
+/** Data pra preencher à mão quando o anexo é assinado uma vez só. */
+export const BLANK_DATE = "____/____/________";

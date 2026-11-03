@@ -3,12 +3,22 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { HttpError, asyncHandler } from "../lib/http";
 import { assertUnitAccess } from "../lib/auth";
-import { MIN_FREQUENCY, belowMinimum } from "../lib/month";
+import { MIN_FREQUENCY, MONTH_NAMES, belowMinimum, monthRange } from "../lib/month";
+import { isMenuEmpty, mealTotal, normalizeMenu } from "../lib/menu";
+import { anexoIIPdf, anexoIIIPdf, anexoIVPdf, anexoVPdf } from "../documents/declaracoes";
+import { anexoXIPdf } from "../documents/anexoXI";
+import type { Student } from "@prisma/client";
 import { loadMonth } from "../documents/monthData";
 import { anexoIPdf } from "../documents/anexoI";
 import { anexoXPdf, anexoXXlsx } from "../documents/anexoX";
 
 export const monthsRouter = Router();
+
+/** Crianças que receberam material e uniforme dentro do mês. */
+function materialDelivered(students: Student[], year: number, month: number) {
+  const { start, end } = monthRange(year, month);
+  return students.filter((s) => s.materialDeliveredAt && s.materialDeliveredAt >= start && s.materialDeliveredAt <= end);
+}
 
 function monthParams(req: Request) {
   const unitId = String(req.query.unitId ?? "");
@@ -38,6 +48,9 @@ monthsRouter.get("/", asyncHandler(async (req, res) => {
     month,
     schoolDays: data.schoolDays,
     minFrequency: MIN_FREQUENCY,
+    materialDeliveries: materialDelivered(data.rows.map((r) => r.student), year, month).length,
+    menuFilled: !isMenuEmpty(normalizeMenu(data.unit.menu)),
+    mealTotal: data.schoolDays ? mealTotal(data.rows.length, data.schoolDays) : null,
     rows: data.rows.map((r) => ({
       studentId: r.student.id,
       name: r.student.name,
@@ -147,6 +160,43 @@ monthsRouter.get("/anexo-10.pdf", asyncHandler(async (req, res) => {
   const data = await readyMonth(req);
   if (!data.schoolDays) throw new HttpError(400, "Lance os dias letivos e as faltas do mês antes de gerar o Anexo X");
   send(res, await anexoXPdf(data), "ANEXO 10.pdf", "application/pdf");
+}));
+
+monthsRouter.get("/anexo-2.pdf", asyncHandler(async (req, res) => {
+  const data = await readyMonth(req);
+  send(res, await anexoIIPdf(data.unit, data.year, data.rows.map((r) => r.student)), "ANEXO 2.pdf", "application/pdf");
+}));
+
+monthsRouter.get("/anexo-3.pdf", asyncHandler(async (req, res) => {
+  const data = await readyMonth(req);
+  send(res, await anexoIIIPdf(data.unit, data.rows.map((r) => r.student)), "ANEXO 3.pdf", "application/pdf");
+}));
+
+monthsRouter.get("/anexo-4.pdf", asyncHandler(async (req, res) => {
+  const data = await readyMonth(req);
+  send(res, await anexoIVPdf(data.unit, data.rows.map((r) => r.student)), "ANEXO 4.pdf", "application/pdf");
+}));
+
+// Anexo V: só quem recebeu material e uniforme no mês (taxa única por aluno)
+monthsRouter.get("/anexo-5.pdf", asyncHandler(async (req, res) => {
+  const data = await readyMonth(req);
+  const students = materialDelivered(data.rows.map((r) => r.student), data.year, data.month);
+  if (students.length === 0) {
+    throw new HttpError(
+      400,
+      `Nenhuma entrega de material e uniforme em ${MONTH_NAMES[data.month - 1]}/${data.year}. ` +
+        "Informe a data de entrega no cadastro da criança (Crianças → Editar)."
+    );
+  }
+  send(res, await anexoVPdf(data.unit, students), "ANEXO 5.pdf", "application/pdf");
+}));
+
+monthsRouter.get("/anexo-11.pdf", asyncHandler(async (req, res) => {
+  const data = await readyMonth(req);
+  if (!data.schoolDays) throw new HttpError(400, "Lance os dias letivos do mês antes de gerar o Anexo XI");
+  const menu = normalizeMenu(data.unit.menu);
+  if (isMenuEmpty(menu)) throw new HttpError(400, "Preencha o cardápio da unidade (menu Cardápio) antes de gerar o Anexo XI");
+  send(res, await anexoXIPdf(data, menu), "ANEXO 11.pdf", "application/pdf");
 }));
 
 monthsRouter.get("/anexo-10.xlsx", asyncHandler(async (req, res) => {

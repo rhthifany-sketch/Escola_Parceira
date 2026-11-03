@@ -32,6 +32,7 @@ const studentSchema = z.object({
   guardianName: optionalText,
   guardianCpf: optionalText,
   guardianPhone: optionalText,
+  materialDeliveredAt: dateField,
 });
 
 studentsRouter.get("/", asyncHandler(async (req, res) => {

@@ -33,10 +33,10 @@ ou no papel na escola (o gestor digitaliza e anexa).
 ## Etapas do sistema
 
 1. **Feito** — Cadastro (unidades, crianças, responsáveis, usuários), frequência do mês, Anexo I e Anexo X.
-2. Anexos II, III, IV e V gerados por criança; guarda das vias assinadas e reaproveitamento todo mês.
+2. **Feito** — Anexos II, III, IV, V e XI (cardápio + cálculo da alimentação).
+   Falta: guardar as vias assinadas dos Anexos II, III e IV e reaproveitar todo mês.
 3. Assinatura: link por criança para o responsável (baixar o PDF, assinar no gov.br, devolver);
    conferência da assinatura; botão "enviar pelo WhatsApp" com a mensagem pronta; painel de quem falta.
-4. Anexo XI: cardápio da unidade (semanas A–D) e o cálculo da alimentação do mês.
 5. Nota fiscal: texto da discriminação calculado; anexar o PDF da nota.
 6. Certidões com validade e aviso de vencimento; comprovantes mensais de FGTS e INSS.
 7. Pacote final por unidade (PDFs juntados e nomeados) + e-mail pronto; controle do prazo do 5º dia útil.

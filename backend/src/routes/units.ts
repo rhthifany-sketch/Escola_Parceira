@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { asyncHandler } from "../lib/http";
+import { normalizeMenu } from "../lib/menu";
 import { assertUnitAccess, requireFinanceiro } from "../lib/auth";
 
 export const unitsRouter = Router();
@@ -12,6 +13,8 @@ const unitSchema = z.object({
   cnpj: z.string().trim().min(14),
   legalRepName: z.string().trim().min(2),
   legalRepCpf: z.string().trim().min(11),
+  attendantName: z.string().trim().nullish().transform((v) => v || null),
+  attendantCpf: z.string().trim().nullish().transform((v) => v || null),
   active: z.boolean().optional(),
 });
 
@@ -28,6 +31,20 @@ unitsRouter.get("/", asyncHandler(async (req, res) => {
 unitsRouter.get("/:id", asyncHandler(async (req, res) => {
   assertUnitAccess(req.user!, req.params.id);
   res.json(await prisma.unit.findUniqueOrThrow({ where: { id: req.params.id } }));
+}));
+
+/** Cardápio das semanas A a D (Anexo XI) — o gestor edita o da unidade dele. */
+unitsRouter.get("/:id/menu", asyncHandler(async (req, res) => {
+  assertUnitAccess(req.user!, req.params.id);
+  const unit = await prisma.unit.findUniqueOrThrow({ where: { id: req.params.id }, select: { menu: true } });
+  res.json(normalizeMenu(unit.menu));
+}));
+
+unitsRouter.put("/:id/menu", asyncHandler(async (req, res) => {
+  assertUnitAccess(req.user!, req.params.id);
+  const menu = normalizeMenu(req.body);
+  await prisma.unit.update({ where: { id: req.params.id }, data: { menu } });
+  res.json(menu);
 }));
 
 unitsRouter.post("/", requireFinanceiro, asyncHandler(async (req, res) => {

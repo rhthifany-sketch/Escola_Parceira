@@ -14,6 +14,8 @@ export interface Unit {
   cnpj: string;
   legalRepName: string;
   legalRepCpf: string;
+  attendantName: string | null;
+  attendantCpf: string | null;
   active: boolean;
   _count?: { students: number };
 }
@@ -33,6 +35,7 @@ export interface Student {
   guardianName: string | null;
   guardianCpf: string | null;
   guardianPhone: string | null;
+  materialDeliveredAt: string | null;
 }
 
 export interface MonthRow {
@@ -53,6 +56,9 @@ export interface MonthData {
   month: number;
   schoolDays: number | null;
   minFrequency: number;
+  materialDeliveries: number;
+  menuFilled: boolean;
+  mealTotal: number | null;
   rows: MonthRow[];
 }
 

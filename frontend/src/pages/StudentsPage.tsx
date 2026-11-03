@@ -10,7 +10,7 @@ import { Alert, Button, Card, ConfirmDelete, Field, Input, Modal, PageTitle, Row
 type Form = Omit<Student, "id" | "unitId">;
 const empty: Form = {
   name: "", shift: "Integral", grei: "", birthDate: "", phone: "", address: "", email: "",
-  enrollmentDate: "", exitDate: "", guardianName: "", guardianCpf: "", guardianPhone: "",
+  enrollmentDate: "", exitDate: "", guardianName: "", guardianCpf: "", guardianPhone: "", materialDeliveredAt: "",
 };
 const isoDay = (v: string | null) => (v ? v.slice(0, 10) : "");
 
@@ -257,6 +257,9 @@ export function StudentsPage() {
             </Field>
             <Field label="Data de saída" hint="Só se a criança saiu do programa">
               <Input type="date" {...field("exitDate")} />
+            </Field>
+            <Field label="Entrega do material e uniforme" hint="Gera o Anexo V no mês da entrega">
+              <Input type="date" {...field("materialDeliveredAt")} />
             </Field>
             <Field label="Telefone (Anexo X)">
               <Input {...field("phone")} />

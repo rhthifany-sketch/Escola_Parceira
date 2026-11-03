@@ -1,8 +1,6 @@
 import { formatDate, servicePeriod } from "../lib/month";
 import type { MonthData } from "./monthData";
-import { HEADER_IMAGE, renderPdf, signatureLine } from "./pdf";
-
-const blank = (v: string | null | undefined, size = 30) => (v && v.trim() ? v.trim() : "_".repeat(size));
+import { blank, declarationPage, paragraph, renderPdf, signatureLine } from "./pdf";
 
 /**
  * ANEXO I – Declaração de frequência: uma página por criança, em ordem
@@ -15,13 +13,8 @@ export function anexoIPdf(data: MonthData): Promise<Buffer> {
     for (const row of data.rows) {
       const s = row.student;
       const period = servicePeriod(s, data.year, data.month);
-      doc.addPage();
-      doc.image(HEADER_IMAGE, (doc.page.width - 260) / 2, 30, { width: 260 });
-      doc.y = 170;
-      doc.font("Helvetica-Bold").fontSize(12).text("ANEXO I - DECLARAÇÃO DE FREQUÊNCIA", { align: "center" });
-      doc.moveDown(2);
-      doc.font("Helvetica").fontSize(11);
-      const p = { align: "justify" as const, lineGap: 5 };
+      declarationPage(doc, "ANEXO I - DECLARAÇÃO DE FREQUÊNCIA");
+      const p = paragraph;
       doc.text(
         `Eu, ${blank(unit.legalRepName)}, CPF ${blank(unit.legalRepCpf, 14)}, representante legal da Instituição ` +
           `${blank(unit.legalName)}, inscrita no CNPJ ${blank(unit.cnpj, 18)}, declaro sob as penas da Lei, que ` +

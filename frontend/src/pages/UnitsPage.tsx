@@ -6,8 +6,8 @@ import type { Unit } from "../lib/types";
 import { useUnits } from "../components/Pickers";
 import { Alert, Button, Card, ConfirmDelete, Field, Input, Modal, PageTitle, RowActions, Td, Th } from "../components/ui";
 
-type Form = Pick<Unit, "name" | "legalName" | "cnpj" | "legalRepName" | "legalRepCpf" | "active">;
-const empty: Form = { name: "", legalName: "", cnpj: "", legalRepName: "", legalRepCpf: "", active: true };
+type Form = Pick<Unit, "name" | "legalName" | "cnpj" | "legalRepName" | "legalRepCpf" | "attendantName" | "attendantCpf" | "active">;
+const empty: Form = { name: "", legalName: "", cnpj: "", legalRepName: "", legalRepCpf: "", attendantName: "", attendantCpf: "", active: true };
 
 export function UnitsPage() {
   const { data: units } = useUnits();
@@ -44,10 +44,10 @@ export function UnitsPage() {
     },
     onError: (err) => setError(errorMessage(err)),
   });
-  const field = (key: keyof Form) => ({
-    value: String(editing!.form[key]),
+  const field = (key: keyof Form, required = true) => ({
+    value: String(editing!.form[key] ?? ""),
     onChange: (e: { target: { value: string } }) => setEditing((ed) => ed && { ...ed, form: { ...ed.form, [key]: e.target.value } }),
-    required: true,
+    required,
   });
   return (
     <>
@@ -87,7 +87,7 @@ export function UnitsPage() {
                 <Td className="text-right">{u._count?.students ?? 0}</Td>
                 <Td>
                   <RowActions
-                    onEdit={() => { setError(""); setEditing({ id: u.id, form: { ...u } }); }}
+                    onEdit={() => { setError(""); setEditing({ id: u.id, form: { ...empty, ...u } }); }}
                     onDelete={() => askDelete(u)}
                   />
                 </Td>
@@ -137,6 +137,15 @@ export function UnitsPage() {
             </Field>
             <Field label="CPF do representante">
               <Input {...field("legalRepCpf")} />
+            </Field>
+            <div className="sm:col-span-2 mt-1 border-t border-slate-100 pt-3 text-sm text-slate-500">
+              Quem atende os responsáveis e explica a bolsa (sai no Anexo II)
+            </div>
+            <Field label="Nome do profissional">
+              <Input {...field("attendantName", false)} />
+            </Field>
+            <Field label="CPF do profissional">
+              <Input {...field("attendantCpf", false)} />
             </Field>
             <label className="flex items-center gap-2 text-sm">
               <input

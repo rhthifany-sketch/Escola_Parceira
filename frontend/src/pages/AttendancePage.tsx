@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Download, Save } from "lucide-react";
@@ -7,6 +7,23 @@ import { usePeriod } from "../lib/period";
 import { MONTHS, type MonthData } from "../lib/types";
 import { MonthPicker, UnitPicker } from "../components/Pickers";
 import { Alert, Button, Card, Field, Input, PageTitle, Td, Th } from "../components/ui";
+
+function DocGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase text-slate-500">{title}</div>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </div>
+  );
+}
+
+function DocButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <Button variant="secondary" onClick={onClick} disabled={disabled}>
+      <Download size={16} /> {label}
+    </Button>
+  );
+}
 
 type Draft = Record<string, { justified: string; unjustified: string }>;
 
@@ -95,7 +112,7 @@ export function AttendancePage() {
     <>
       <PageTitle
         title="Frequência e anexos do mês"
-        description="Informe os dias letivos e as faltas de cada criança. Só a falta NÃO justificada conta para a frequência mínima de 60% exigida pela prefeitura (Anexo IV). Depois de salvar, gere o Anexo I (uma declaração por criança, em ordem alfabética) e o Anexo X."
+        description="Informe os dias letivos e as faltas de cada criança. Só a falta NÃO justificada conta para a frequência mínima de 60% exigida pela prefeitura (Anexo IV). Depois de salvar, gere os anexos do mês no fim da página."
       />
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <UnitPicker value={unitId} onChange={(id) => set({ unitId: id })} />
@@ -201,19 +218,41 @@ export function AttendancePage() {
 
           <Card>
             <h2 className="mb-1 font-semibold">Documentos do mês</h2>
-            <p className="mb-3 text-sm text-slate-500">
-              Os arquivos já saem com o nome que a prefeitura pede (“ANEXO 1”, “ANEXO 10”).
+            <p className="mb-4 text-sm text-slate-500">
+              Cada arquivo já sai com o nome que a prefeitura pede (“ANEXO 1”, “ANEXO 2”…), com todas as crianças em ordem alfabética
+              num PDF só. Os Anexos II, III e IV são assinados uma vez, mas vão para a prefeitura todo mês.
             </p>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={() => get("/months/anexo-1.pdf")} disabled={!data.rows.length}>
-                <Download size={16} /> Anexo I — Declarações de frequência (PDF)
-              </Button>
-              <Button variant="secondary" onClick={() => get("/months/anexo-10.pdf")} disabled={!data.rows.length}>
-                <Download size={16} /> Anexo X — Relatório mensal (PDF)
-              </Button>
-              <Button variant="secondary" onClick={() => get("/months/anexo-10.xlsx")} disabled={!data.rows.length}>
-                <Download size={16} /> Anexo X (Excel, para conferência)
-              </Button>
+            <div className="flex flex-col gap-4">
+              <DocGroup title="Por criança, todo mês">
+                <DocButton label="Anexo I — Frequência" onClick={() => get("/months/anexo-1.pdf")} disabled={!data.rows.length} />
+                <DocButton label="Anexo II — Recebimento de informação" onClick={() => get("/months/anexo-2.pdf")} disabled={!data.rows.length} />
+                <DocButton label="Anexo III — Deferimento de matrícula" onClick={() => get("/months/anexo-3.pdf")} disabled={!data.rows.length} />
+                <DocButton label="Anexo IV — Veracidade das informações" onClick={() => get("/months/anexo-4.pdf")} disabled={!data.rows.length} />
+              </DocGroup>
+              <DocGroup title="Da unidade, todo mês">
+                <DocButton label="Anexo X — Relatório mensal (PDF)" onClick={() => get("/months/anexo-10.pdf")} disabled={!data.rows.length} />
+                <DocButton label="Anexo X (Excel, para conferência)" onClick={() => get("/months/anexo-10.xlsx")} disabled={!data.rows.length} />
+                <DocButton label="Anexo XI — Refeições e cardápio" onClick={() => get("/months/anexo-11.pdf")} disabled={!data.rows.length} />
+                <span className="self-center text-xs text-slate-500">
+                  {data.menuFilled ? (
+                    data.mealTotal !== null && (
+                      <>Alimentação do mês: {data.rows.length} alunos × R$ 10,90 × {data.schoolDays} dias = <strong>{data.mealTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</strong></>
+                    )
+                  ) : (
+                    <span className="text-amber-700">
+                      Cardápio ainda não preenchido — <Link className="underline" to={`/cardapio?unidade=${unitId}`}>preencher</Link>
+                    </span>
+                  )}
+                </span>
+              </DocGroup>
+              <DocGroup title="Quando houver entrega de material e uniforme">
+                <DocButton label={`Anexo V — Material e uniforme (${data.materialDeliveries})`} onClick={() => get("/months/anexo-5.pdf")} disabled={!data.materialDeliveries} />
+                {!data.materialDeliveries && (
+                  <span className="self-center text-xs text-slate-500">
+                    Nenhuma entrega neste mês. A data da entrega fica no cadastro da criança.
+                  </span>
+                )}
+              </DocGroup>
             </div>
           </Card>
         </div>

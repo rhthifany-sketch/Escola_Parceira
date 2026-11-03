@@ -45,3 +45,19 @@ it("ordem alfabética ignora acento", () => {
   const names = ["Érica", "Davi", "Eduardo"].map((name) => ({ name }));
   expect(names.sort(byName).map((n) => n.name)).toEqual(["Davi", "Eduardo", "Érica"]);
 });
+
+import { mealTotal, normalizeMenu, isMenuEmpty } from "./menu";
+
+describe("Anexo XI", () => {
+  it("alimentação = alunos × R$ 10,90 × dias letivos", () => {
+    expect(mealTotal(30, 20)).toBe(6540);
+    expect(mealTotal(7, 21)).toBe(1602.3);
+  });
+  it("cardápio incompleto vira completo, sem quebrar", () => {
+    const m = normalizeMenu({ A: { "0": { almoco: ["Arroz", "Feijão"] } } });
+    expect(m.A["0"].almoco).toEqual(["Arroz", "Feijão", "", "", ""]);
+    expect(m.D["2a5"].desjejum).toHaveLength(5);
+    expect(isMenuEmpty(normalizeMenu(null))).toBe(true);
+    expect(isMenuEmpty(m)).toBe(false);
+  });
+});

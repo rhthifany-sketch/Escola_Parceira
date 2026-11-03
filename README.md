@@ -13,9 +13,13 @@ com a nota fiscal.
   Data de saída tira a criança do programa sem apagar o histórico.
 - **Frequência do mês**: dias letivos + faltas justificadas e não justificadas por criança.
   Calcula a frequência e destaca quem ficou **abaixo de 60%**. Só a falta **não justificada** conta.
-- **Documentos**:
-  - **ANEXO 1.pdf**: uma declaração de frequência por criança, em ordem alfabética, num arquivo só.
-  - **ANEXO 10.pdf** e **ANEXO 10.xlsx**: relatório mensal da unidade.
+- **Documentos** (todas as crianças em ordem alfabética, num PDF por anexo, com o nome que a prefeitura pede):
+  - **ANEXO 1**: declaração de frequência do mês.
+  - **ANEXO 2, 3 e 4**: assinados uma vez, reenviados todo mês (o Anexo II usa o profissional que atende os pais, no cadastro da unidade).
+  - **ANEXO 5**: só as crianças com entrega de material e uniforme no mês (data da entrega no cadastro da criança).
+  - **ANEXO 10** (PDF e Excel): relatório mensal da unidade.
+  - **ANEXO 11**: cardápio das semanas A a D (tela Cardápio, preenchido uma vez) + cálculo da alimentação.
+- **Editar e excluir** crianças (uma ou várias), unidades e usuários.
 - **Painel do mês**: a situação de cada unidade (frequência lançada, abaixo de 60%, cadastro incompleto).
 
 ## Próximas etapas
