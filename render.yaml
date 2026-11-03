@@ -1,0 +1,50 @@
+# Blueprint do Render: banco + API + site. Passo a passo no README.
+databases:
+  - name: escola-parceira-db
+    databaseName: escola_parceira
+    user: escola
+    plan: basic-256mb
+
+services:
+  - type: web
+    name: escola-parceira-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: starter
+    healthCheckPath: /health
+    buildFilter:
+      paths:
+        - backend/**
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: escola-parceira-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      # primeiro usuário (financeiro): preencher no painel do Render antes do primeiro deploy
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_NAME
+        value: Financeiro
+      # URL do site (preencher depois que ele existir)
+      - key: CORS_ORIGIN
+        sync: false
+
+  - type: web
+    name: escola-parceira
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      # URL da API + /api (preencher depois que a API existir)
+      - key: VITE_API_URL
+        sync: false

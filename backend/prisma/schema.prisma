@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// FINANCEIRO vê e edita todas as unidades; GESTOR só a unidade dele.
+enum UserRole {
+  FINANCEIRO
+  GESTOR
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         UserRole
+  unitId       String?  @map("unit_id")
+  unit         Unit?    @relation(fields: [unitId], references: [id])
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+/// Escola parceira (unidade). Os dados da instituição e do representante
+/// legal preenchem os Anexos I e III.
+model Unit {
+  id           String          @id @default(cuid())
+  name         String          @unique
+  legalName    String          @map("legal_name")
+  cnpj         String
+  legalRepName String          @map("legal_rep_name")
+  legalRepCpf  String          @map("legal_rep_cpf")
+  active       Boolean         @default(true)
+  createdAt    DateTime        @default(now()) @map("created_at")
+  students     Student[]
+  months       MonthlyReport[]
+  users        User[]
+
+  @@map("units")
+}
+
+/// Criança do programa. As colunas seguem o Anexo X; o responsável é quem
+/// assina os Anexos I (ciente), II, IV e V.
+model Student {
+  id             String       @id @default(cuid())
+  unitId         String       @map("unit_id")
+  unit           Unit         @relation(fields: [unitId], references: [id])
+  name           String
+  shift          String
+  grei           String
+  birthDate      DateTime?    @map("birth_date") @db.Date
+  phone          String?
+  address        String?
+  email          String?
+  enrollmentDate DateTime     @map("enrollment_date") @db.Date
+  exitDate       DateTime?    @map("exit_date") @db.Date
+  guardianName   String?      @map("guardian_name")
+  guardianCpf    String?      @map("guardian_cpf")
+  guardianPhone  String?      @map("guardian_phone")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  attendances    Attendance[]
+
+  @@index([unitId, name])
+  @@map("students")
+}
+
+/// O mês de uma unidade: dias letivos e as faltas de cada criança.
+model MonthlyReport {
+  id          String       @id @default(cuid())
+  unitId      String       @map("unit_id")
+  unit        Unit         @relation(fields: [unitId], references: [id])
+  year        Int
+  month       Int
+  schoolDays  Int?         @map("school_days")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  attendances Attendance[]
+
+  @@unique([unitId, year, month])
+  @@map("monthly_reports")
+}
+
+model Attendance {
+  id                  String        @id @default(cuid())
+  reportId            String        @map("report_id")
+  report              MonthlyReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  studentId           String        @map("student_id")
+  student             Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  justifiedAbsences   Int           @default(0) @map("justified_absences")
+  unjustifiedAbsences Int           @default(0) @map("unjustified_absences")
+
+  @@unique([reportId, studentId])
+  @@map("attendances")
+}
