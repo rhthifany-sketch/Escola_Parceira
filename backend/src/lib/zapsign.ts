@@ -6,9 +6,9 @@ import { HttpError } from "./http";
  * ZAPSIGN_API_URL: padrão é o ambiente de testes (sandbox, sem validade
  * jurídica); em produção, https://api.zapsign.com.br/api/v1.
  *
- * Os convites NÃO são enviados pela ZapSign (e-mail/WhatsApp dela têm
- * custo): o sistema recebe o link de cada signatário e manda pelo botão
- * de WhatsApp que já existe.
+ * Convite: por padrão o sistema recebe o link de cada signatário e manda
+ * pelo botão de WhatsApp dele; no envio automático (ou se pedido) a própria
+ * ZapSign manda o convite pelo WhatsApp do responsável.
  */
 export const SANDBOX_URL = "https://sandbox.api.zapsign.com.br/api/v1";
 
@@ -72,6 +72,8 @@ export interface NewSigner {
   role: "responsável" | "escola";
   name: string;
   phone: string | null;
+  /** a ZapSign manda o convite pelo WhatsApp (tem custo no plano dela) */
+  sendWhatsapp?: boolean;
 }
 
 /** Cria o documento na ZapSign a partir do PDF e devolve os links de cada signatário. */
@@ -89,7 +91,7 @@ export function createDoc(opts: { name: string; pdf: Buffer; externalId: string;
         external_id: s.role,
         auth_mode: "assinaturaTela",
         send_automatic_email: false,
-        send_automatic_whatsapp: false,
+        send_automatic_whatsapp: !!s.sendWhatsapp && digits.length >= 10,
         ...(digits.length >= 10 ? { phone_country: "55", phone_number: digits } : {}),
       };
     }),

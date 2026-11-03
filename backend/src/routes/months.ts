@@ -8,7 +8,7 @@ import { isMenuEmpty, mealTotal, normalizeMenu } from "../lib/menu";
 import { anexoIIPdf, anexoIIIPdf, anexoIVPdf, anexoVPdf } from "../documents/declaracoes";
 import { anexoXIPdf } from "../documents/anexoXI";
 import type { Student } from "@prisma/client";
-import { loadSignatureStatus } from "./signatures";
+import { loadSignatureStatus } from "../services/signatureStatus";
 import { loadMonth } from "../documents/monthData";
 import { anexoIPdf } from "../documents/anexoI";
 import { anexoXPdf, anexoXXlsx } from "../documents/anexoX";

@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Building2, CalendarCheck, LayoutDashboard, LogOut, Users, Baby, Utensils, PenLine } from "lucide-react";
+import { Building2, CalendarCheck, LayoutDashboard, LogOut, Users, Baby, Utensils, PenLine, Settings } from "lucide-react";
 import { useAuth } from "../lib/auth";
 
 export function Layout() {
@@ -14,6 +14,7 @@ export function Layout() {
       ? [
           { to: "/unidades", label: "Unidades", icon: Building2 },
           { to: "/usuarios", label: "Usuários", icon: Users },
+          { to: "/configuracoes", label: "Configurações", icon: Settings },
         ]
       : []),
   ];

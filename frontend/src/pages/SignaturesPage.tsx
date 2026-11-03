@@ -4,9 +4,11 @@ import { Link } from "react-router-dom";
 import { Copy, Download, ExternalLink, MessageCircle, RefreshCw, Smartphone, Upload } from "lucide-react";
 import { api, download, errorMessage } from "../lib/api";
 import { usePeriod } from "../lib/period";
-import { MONTHS, type DocType, type SignatureItem, type SignatureRow } from "../lib/types";
+import { MONTHS, type DocType, type SendSummary, type SignatureItem, type SignatureRow } from "../lib/types";
 import { MonthPicker, UnitPicker } from "../components/Pickers";
 import { Alert, Button, Card, Modal, PageTitle, Td, Th } from "../components/ui";
+
+const typeLabels = (types: DocType[]) => types.map((t) => COLUMNS.find((c) => c.type === t)?.label ?? t).join(", ");
 
 const COLUMNS: { type: DocType; label: string; number: number }[] = [
   { type: "ANEXO_I", label: "Anexo I", number: 1 },
@@ -58,6 +60,30 @@ export function SignaturesPage() {
   });
   const rows = data?.rows ?? [];
   const done = rows.filter((r) => r.complete).length;
+  const toSend = rows.filter((r) => r.toRequest.length > 0);
+  const [sendWhatsapp, setSendWhatsapp] = useState(true);
+  const [confirmSend, setConfirmSend] = useState(false);
+  // links que o representante legal ainda precisa assinar
+  const schoolLinks = rows.flatMap((r) =>
+    r.openRequests.flatMap((q) => q.signers.filter((s) => s.role === "escola" && s.status !== "signed").map((s) => ({ student: r.name, url: s.url, types: q.types })))
+  );
+  const sendAll = useMutation({
+    mutationFn: async () => (await api.post<SendSummary>("/signatures/zapsign/send-unit", { ...params, whatsapp: sendWhatsapp })).data,
+    onSuccess: (r) => {
+      setConfirmSend(false);
+      queryClient.invalidateQueries({ queryKey: ["signatures", unitId, year, month] });
+      const skipped = r.skipped.map((s) => `${s.student} (${s.reason})`).join("; ");
+      const errors = r.errors.map((e) => `${e.student}: ${e.error}`).join("; ");
+      setMessage({
+        tone: errors ? "error" : skipped ? "warning" : "success",
+        text: `${r.sent} link(s) criado(s)${sendWhatsapp ? " e enviado(s) pela ZapSign no WhatsApp" : ""}.${skipped ? ` Ficaram de fora: ${skipped}.` : ""}${errors ? ` Erros: ${errors}` : ""}`,
+      });
+    },
+    onError: (err) => {
+      setConfirmSend(false);
+      setMessage({ tone: "error", text: errorMessage(err) });
+    },
+  });
 
   const getMerged = async (c: (typeof COLUMNS)[number]) => {
     setMessage(null);
@@ -109,12 +135,58 @@ export function SignaturesPage() {
               <div className="text-sm text-slate-700">
                 <strong>Assinatura pelo celular (ZapSign)</strong>
                 {data.zapsign.sandbox && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">ambiente de TESTE — sem validade jurídica</span>}
-                <div className="text-xs text-slate-500">Abra um anexo e clique em “Criar link de assinatura”. Depois que assinarem, clique em Atualizar.</div>
+                <div className="text-xs text-slate-500">
+                  Um link por criança com todos os documentos pendentes dela. O sistema confere sozinho quem já assinou.
+                </div>
               </div>
-              <Button variant="secondary" className="ml-auto" onClick={() => refreshAll.mutate()} disabled={refreshAll.isPending}>
-                <RefreshCw size={14} /> {refreshAll.isPending ? "Conferindo…" : "Atualizar assinaturas da ZapSign"}
-              </Button>
+              <div className="ml-auto flex flex-wrap gap-2">
+                <Button onClick={() => setConfirmSend(true)} disabled={!toSend.length}>
+                  <Smartphone size={14} /> Enviar para todos com pendência ({toSend.length})
+                </Button>
+                <Button variant="secondary" onClick={() => refreshAll.mutate()} disabled={refreshAll.isPending}>
+                  <RefreshCw size={14} /> {refreshAll.isPending ? "Conferindo…" : "Atualizar agora"}
+                </Button>
+              </div>
+              {schoolLinks.length > 0 && (
+                <details className="w-full text-sm">
+                  <summary className="cursor-pointer font-medium text-blue-800">
+                    Assinaturas da escola pendentes ({schoolLinks.length}) — o representante legal assina por aqui
+                  </summary>
+                  <ul className="mt-2 flex flex-col gap-1">
+                    {schoolLinks.map((l) => (
+                      <li key={l.url}>
+                        <a href={l.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-700 hover:underline">
+                          <ExternalLink size={12} /> {l.student}
+                        </a>{" "}
+                        <span className="text-xs text-slate-500">({l.types.map((t) => COLUMNS.find((c) => c.type === t)?.label).join(", ")})</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
             </Card>
+          )}
+          {confirmSend && (
+            <Modal title="Enviar links de assinatura" onClose={() => setConfirmSend(false)}>
+              <div className="flex flex-col gap-3 text-sm text-slate-700">
+                <p>
+                  Vai criar <strong>{toSend.length} link(s)</strong> na ZapSign — um por criança, com todos os documentos pendentes dela
+                  de {MONTHS[month - 1].toLowerCase()}/{year}. Quem já tem link aberto não recebe outro.
+                </p>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={sendWhatsapp} onChange={(e) => setSendWhatsapp(e.target.checked)} />
+                  A ZapSign manda o convite no WhatsApp de cada responsável
+                </label>
+                <p className="text-xs text-slate-500">
+                  Sem essa opção, os links ficam prontos e você manda pelo botão “Avisar no WhatsApp” de cada criança. Criança sem
+                  responsável (ou sem WhatsApp, com a opção marcada) fica de fora e aparece no resumo.
+                </p>
+                <div className="flex justify-end gap-2">
+                  <Button variant="secondary" onClick={() => setConfirmSend(false)}>Cancelar</Button>
+                  <Button onClick={() => sendAll.mutate()} disabled={sendAll.isPending}>{sendAll.isPending ? "Enviando…" : "Enviar"}</Button>
+                </div>
+              </div>
+            </Modal>
           )}
           {message && <Alert tone={message.tone}>{message.text}</Alert>}
           <Card className="overflow-x-auto p-0">
@@ -236,9 +308,10 @@ function DocModal({
     const fresh = (await api.get<{ rows: SignatureRow[] }>("/signatures", { params })).data.rows;
     return fresh.find((r) => r.studentId === row.studentId)?.items.find((i) => i.type === item.type) ?? null;
   };
+  const [viaWhatsapp, setViaWhatsapp] = useState(false);
   const createLink = useMutation({
     mutationFn: async () => {
-      await api.post("/signatures/zapsign", { studentId: row.studentId, type: item.type, year: params.year, month: params.month });
+      await api.post("/signatures/zapsign/package", { studentId: row.studentId, year: params.year, month: params.month, whatsapp: viaWhatsapp });
       return reload();
     },
     onSuccess: (fresh) => { setError(""); onChanged(fresh); },
@@ -339,17 +412,27 @@ function DocModal({
             </div>
             {!item.request && (
               <>
-                <p className="mb-3 text-slate-600">
-                  Cria o documento na ZapSign com {who} e gera um link para cada um assinar na tela do celular, sem baixar nada.
+                <p className="mb-2 text-slate-600">
+                  Cria <strong>um documento só</strong> na ZapSign com todos os anexos pendentes de {row.name} ({typeLabels(row.toRequest)}).
+                  O responsável recebe um link e assina tudo de uma vez, na tela do celular.
                 </p>
-                <Button onClick={() => createLink.mutate()} disabled={createLink.isPending}>
-                  {createLink.isPending ? "Criando…" : "Criar link de assinatura"}
-                </Button>
+                {row.guardianPhone && (
+                  <label className="mb-3 flex items-center gap-2 text-slate-600">
+                    <input type="checkbox" checked={viaWhatsapp} onChange={(e) => setViaWhatsapp(e.target.checked)} />
+                    A ZapSign já manda o convite no WhatsApp do responsável
+                  </label>
+                )}
+                <div>
+                  <Button onClick={() => createLink.mutate()} disabled={createLink.isPending}>
+                    {createLink.isPending ? "Criando…" : "Criar link de assinatura"}
+                  </Button>
+                </div>
               </>
             )}
             {item.request && (
               <div className="flex flex-col gap-2">
-                {item.request.status === "RECUSADO" && <p className="font-medium text-red-700">Alguém recusou a assinatura na ZapSign. Crie um link novo se precisar.</p>}
+                {item.request.status === "RECUSADO" && <p className="font-medium text-red-700">Alguém recusou a assinatura na ZapSign. Cancele o pedido e crie um link novo se precisar.</p>}
+                <p className="text-slate-600">Neste link: {typeLabels(item.request.types)}.</p>
                 {item.request.signers.map((s) => (
                   <div key={s.role} className="flex flex-wrap items-center gap-2">
                     <span className="w-48 truncate">

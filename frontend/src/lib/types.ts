@@ -115,6 +115,7 @@ export interface SignRequestInfo {
   status: "PENDENTE" | "ASSINADO" | "RECUSADO";
   createdAt: string;
   signers: { role: "responsável" | "escola"; name: string; url: string; status: string; signedAt: string | null }[];
+  types: DocType[];
 }
 
 export interface SignatureRow {
@@ -124,5 +125,14 @@ export interface SignatureRow {
   guardianPhone: string | null;
   complete: boolean;
   items: SignatureItem[];
+  /** anexos pendentes sem pedido aberto — vão no próximo link */
+  toRequest: DocType[];
+  openRequests: SignRequestInfo[];
   whatsapp: string | null;
+}
+
+export interface SendSummary {
+  sent: number;
+  skipped: { unit: string; student: string; reason: string }[];
+  errors: { unit: string; student: string; error: string }[];
 }

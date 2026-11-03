@@ -146,32 +146,78 @@ model SignedDocument {
   uploadedById String?       @map("uploaded_by_id")
   uploadedBy   User?         @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
   uploadedAt   DateTime      @default(now()) @map("uploaded_at")
+  /// veio de um pedido da ZapSign (o original completo fica no pedido)
+  requestId    String?       @map("request_id")
+  request      SignRequest?  @relation(fields: [requestId], references: [id], onDelete: SetNull)
 
   @@index([studentId, type])
   @@index([unitId, type, year, month])
   @@map("signed_documents")
 }
 
-/// Pedido de assinatura enviado à plataforma (ZapSign) para um anexo de uma criança.
+/// Pedido de assinatura enviado à plataforma (ZapSign): UM documento por
+/// criança e mês, com todos os anexos pendentes dela juntos (o responsável
+/// assina tudo de uma vez). Quando volta assinado, cada anexo é separado
+/// (ver src/services/signPackage.ts).
 model SignRequest {
-  id          String        @id @default(cuid())
-  unitId      String        @map("unit_id")
-  unit        Unit          @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  studentId   String        @map("student_id")
-  student     Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  type        SignedDocType
-  year        Int?
-  month       Int?
-  provider    String        @default("ZAPSIGN")
+  id          String           @id @default(cuid())
+  unitId      String           @map("unit_id")
+  unit        Unit             @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  studentId   String           @map("student_id")
+  student     Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// anexos que estão neste documento, na ordem das páginas
+  types       SignedDocType[]
+  /// mês de referência do pacote (o Anexo I é desse mês)
+  year        Int
+  month       Int
+  /// { "ANEXO_I": [primeira página (0), quantidade], … }
+  pageMap     Json             @default("{}") @map("page_map")
+  provider    String           @default("ZAPSIGN")
   /// token do documento na ZapSign
-  externalId  String        @map("external_id")
+  externalId  String           @map("external_id")
   /// [{ role: "responsável" | "escola", name, url, status, signedAt }]
   signers     Json
   /// PENDENTE | ASSINADO | RECUSADO
-  status      String        @default("PENDENTE")
-  createdAt   DateTime      @default(now()) @map("created_at")
-  completedAt DateTime?     @map("completed_at")
+  status      String           @default("PENDENTE")
+  /// criado pelo envio automático do mês
+  auto        Boolean          @default(false)
+  /// a ZapSign mandou o convite pelo WhatsApp
+  whatsapp    Boolean          @default(false)
+  /// PDF assinado completo, como veio da ZapSign (com o selo dela)
+  signedFile  Bytes?           @map("signed_file")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  completedAt DateTime?        @map("completed_at")
+  documents   SignedDocument[]
 
-  @@index([studentId, type])
+  @@index([studentId, year, month])
+  @@index([externalId])
   @@map("sign_requests")
+}
+
+/// Configurações gerais (uma linha só, id = "geral").
+model Settings {
+  id               String  @id @default("geral")
+  /// envio automático dos pedidos de assinatura
+  autoSendEnabled  Boolean @default(false) @map("auto_send_enabled")
+  /// dia do mês do envio (1 a 28)
+  autoSendDay      Int     @default(15) @map("auto_send_day")
+  /// ATUAL = documentos do próprio mês; ANTERIOR = do mês anterior
+  autoSendMonth    String  @default("ATUAL") @map("auto_send_month")
+  /// a ZapSign envia o convite pelo WhatsApp do responsável
+  autoSendWhatsapp Boolean @default(true) @map("auto_send_whatsapp")
+
+  @@map("settings")
+}
+
+/// Cada envio automático (um por mês de referência).
+model AutoSendRun {
+  id      String   @id @default(cuid())
+  year    Int
+  month   Int
+  runAt   DateTime @default(now()) @map("run_at")
+  /// { sent, skipped: [{ unit, student, reason }], errors: [...] }
+  summary Json
+
+  @@unique([year, month])
+  @@map("auto_send_runs")
 }

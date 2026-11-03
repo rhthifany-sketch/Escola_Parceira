@@ -8,7 +8,8 @@ import { usersRouter } from "./routes/users";
 import { unitsRouter } from "./routes/units";
 import { studentsRouter } from "./routes/students";
 import { monthsRouter } from "./routes/months";
-import { signaturesRouter } from "./routes/signatures";
+import { signaturesRouter, zapsignWebhookRouter } from "./routes/signatures";
+import { settingsRouter } from "./routes/settings";
 
 export function createApp() {
   const app = express();
@@ -24,6 +25,9 @@ export function createApp() {
   app.use("/api/students", requireAuth, studentsRouter);
   app.use("/api/months", requireAuth, monthsRouter);
   app.use("/api/signatures", requireAuth, signaturesRouter);
+  app.use("/api/settings", requireAuth, settingsRouter);
+  // aviso da ZapSign quando alguém assina (sem login; confere direto na API dela)
+  app.use("/api/webhooks/zapsign", zapsignWebhookRouter);
   app.use(errorHandler);
   return app;
 }

@@ -69,9 +69,8 @@ export function whatsappMessage(opts: {
     return (
       `Olá${first ? `, ${first}` : ""}! Aqui é da ${opts.unitName}. ` +
       `Precisamos da sua assinatura nos documentos da bolsa da Prefeitura de Niterói de ${opts.studentName} (referente a ${opts.monthLabel}). ` +
-      `É só abrir o link, conferir e assinar na tela do celular:\n` +
-      opts.signLinks.map((l) => `${l.label}: ${l.url}`).join("\n") +
-      (opts.signLinks.length < opts.pending.length ? `\nOs demais documentos (${opts.pending.filter((p) => !opts.signLinks!.some((l) => l.label === p)).join(", ")}) precisam ser assinados na secretaria.` : "") +
+      `É só abrir o link, conferir os documentos (${opts.pending.join(", ")}) e assinar uma vez na tela do celular:\n` +
+      opts.signLinks.map((l) => (opts.signLinks!.length > 1 ? `${l.label}: ${l.url}` : l.url)).join("\n") +
       `\nObrigado!`
     );
   }

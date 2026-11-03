@@ -6,101 +6,15 @@ import type { SignedDocType } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { HttpError, asyncHandler } from "../lib/http";
 import { assertUnitAccess } from "../lib/auth";
-import { MONTH_NAMES } from "../lib/month";
-import { readPdfSignatures, type PdfSignature } from "../lib/pdfSignatures";
-import { DOC_TYPES, SIGN_RULES, evaluateDoc, isRequired, whatsappLink, whatsappMessage } from "../lib/signatureRules";
-import { loadMonth } from "../documents/monthData";
-import { anexoPdfByType } from "../documents/byType";
-import { createDoc, downloadSignedFile, getDoc, requestStatus, zapsignEnabled, zapsignIsSandbox } from "../lib/zapsign";
-
-interface RequestSigner {
-  role: "responsável" | "escola";
-  name: string;
-  url: string;
-  status: string;
-  signedAt: string | null;
-}
+import { readPdfSignatures } from "../lib/pdfSignatures";
+import { DOC_TYPES, SIGN_RULES } from "../lib/signatureRules";
+import { zapsignEnabled, zapsignIsSandbox } from "../lib/zapsign";
+import { loadSignatureStatus } from "../services/signatureStatus";
+import { createPackage, refreshOpen, refreshRequest, sendUnit, type SendSummary } from "../services/signPackage";
 
 export const signaturesRouter = Router();
 const MAX_MB = 10;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_MB * 1024 * 1024 } });
-
-/** Situação das assinaturas de cada criança matriculada no mês. */
-export async function loadSignatureStatus(unitId: string, year: number, month: number) {
-  const data = await loadMonth(unitId, year, month);
-  const ids = data.rows.map((r) => r.student.id);
-  const docs = await prisma.signedDocument.findMany({
-    where: {
-      studentId: { in: ids },
-      OR: [{ type: "ANEXO_I", year, month }, { type: { not: "ANEXO_I" } }],
-    },
-    select: { id: true, studentId: true, type: true, fileName: true, method: true, signatures: true, uploadedAt: true, uploadedBy: { select: { name: true } } },
-    orderBy: { uploadedAt: "desc" },
-  });
-  const latest = new Map<string, (typeof docs)[number]>();
-  for (const d of docs) if (!latest.has(`${d.studentId}|${d.type}`)) latest.set(`${d.studentId}|${d.type}`, d);
-  // pedidos de assinatura pela plataforma ainda abertos
-  const requests = await prisma.signRequest.findMany({
-    where: {
-      studentId: { in: ids },
-      status: { not: "ASSINADO" },
-      OR: [{ type: "ANEXO_I", year, month }, { type: { not: "ANEXO_I" } }],
-    },
-    orderBy: { createdAt: "desc" },
-  });
-  const openRequest = new Map<string, (typeof requests)[number]>();
-  for (const r of requests) if (!openRequest.has(`${r.studentId}|${r.type}`)) openRequest.set(`${r.studentId}|${r.type}`, r);
-
-  const school = { name: data.unit.legalRepName, cpf: data.unit.legalRepCpf };
-  const monthLabel = `${MONTH_NAMES[month - 1]}/${year}`;
-  const rows = data.rows.map(({ student }) => {
-    const guardian = { name: student.guardianName, cpf: student.guardianCpf };
-    const items = DOC_TYPES.filter((t) => isRequired(t, student)).map((type) => {
-      const doc = latest.get(`${student.id}|${type}`);
-      const evaluation = doc ? evaluateDoc(type, { method: doc.method, signatures: doc.signatures as unknown as PdfSignature[] }, guardian, school) : null;
-      return {
-        type,
-        label: SIGN_RULES[type].label,
-        needsGuardian: SIGN_RULES[type].guardian,
-        needsSchool: SIGN_RULES[type].school,
-        doc: doc ? {
-          id: doc.id,
-          fileName: doc.fileName,
-          method: doc.method,
-          signatures: doc.signatures,
-          uploadedAt: doc.uploadedAt,
-          uploadedBy: doc.uploadedBy?.name ?? null,
-        } : null,
-        complete: evaluation?.complete ?? false,
-        missing: evaluation?.missing ?? [],
-        altered: evaluation?.altered ?? false,
-        request: (() => {
-          const r = evaluation?.complete ? null : openRequest.get(`${student.id}|${type}`);
-          return r ? { id: r.id, status: r.status, createdAt: r.createdAt, signers: r.signers as unknown as RequestSigner[] } : null;
-        })(),
-      };
-    });
-    const pendingFromGuardian = items.filter((i) => !i.complete && i.needsGuardian).map((i) => i.label);
-    const signLinks = items
-      .filter((i) => !i.complete && i.request?.status === "PENDENTE")
-      .flatMap((i) => i.request!.signers.filter((s) => s.role === "responsável" && s.status !== "signed").map((s) => ({ label: i.label, url: s.url })));
-    return {
-      studentId: student.id,
-      name: student.name,
-      guardianName: student.guardianName,
-      guardianPhone: student.guardianPhone,
-      complete: items.every((i) => i.complete),
-      items,
-      whatsapp: pendingFromGuardian.length
-        ? whatsappLink(
-            student.guardianPhone,
-            whatsappMessage({ guardianName: student.guardianName, studentName: student.name, unitName: data.unit.name, pending: pendingFromGuardian, monthLabel, signLinks })
-          )
-        : null,
-    };
-  });
-  return { unit: data.unit, rows };
-}
 
 function monthQuery(q: Record<string, unknown>) {
   const unitId = String(q.unitId ?? "");
@@ -189,7 +103,16 @@ signaturesRouter.get("/merged/:type", asyncHandler(async (req, res) => {
   const status = await loadSignatureStatus(unitId, year, month);
   const ids = status.rows.flatMap((r) => r.items.filter((i) => i.type === type && i.doc).map((i) => i.doc!.id));
   if (ids.length === 0) throw new HttpError(400, `Nenhum ${SIGN_RULES[type].label} assinado enviado para esse mês`);
-  const docs = await prisma.signedDocument.findMany({ where: { id: { in: ids } }, select: { id: true, data: true, uploadedAt: true, student: { select: { name: true } } } });
+  const docs = await prisma.signedDocument.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, data: true, uploadedAt: true, requestId: true, student: { select: { name: true } } },
+  });
+  // assinado pela ZapSign: o original anexado é o pacote completo, com o selo dela
+  const packages = new Map(
+    (await prisma.signRequest.findMany({ where: { id: { in: docs.flatMap((d) => (d.requestId ? [d.requestId] : [])) } }, select: { id: true, signedFile: true } }))
+      .filter((r) => r.signedFile)
+      .map((r) => [r.id, Buffer.from(r.signedFile!)])
+  );
   const byId = new Map(docs.map((d) => [d.id, d]));
   const merged = await PDFDocument.create();
   const failed: string[] = [];
@@ -203,9 +126,13 @@ signaturesRouter.get("/merged/:type", asyncHandler(async (req, res) => {
     }
     // o original assinado, intacto, dentro do arquivo
     const label = SIGN_RULES[type].label;
-    await merged.attach(d.data, `${label} - ${d.student.name} (original assinado).pdf`, {
+    const original = (d.requestId && packages.get(d.requestId)) || d.data;
+    const isPackage = original !== d.data;
+    await merged.attach(original, `${label} - ${d.student.name} (original assinado${isPackage ? ", todos os documentos" : ""}).pdf`, {
       mimeType: "application/pdf",
-      description: `${label} de ${d.student.name} — arquivo original assinado, sem alteração`,
+      description: isPackage
+        ? `Documentos da bolsa de ${d.student.name} assinados juntos na ZapSign (inclui o ${label}) — original, sem alteração`
+        : `${label} de ${d.student.name} — arquivo original assinado, sem alteração`,
       creationDate: d.uploadedAt,
       modificationDate: d.uploadedAt,
     });
@@ -219,110 +146,53 @@ signaturesRouter.get("/merged/:type", asyncHandler(async (req, res) => {
   res.send(Buffer.from(await merged.save()));
 }));
 
-// ---------------- ZapSign (assinatura pelo celular) ----------------
 
-const requestSchema = uploadSchema;
+// ---------------- ZapSign: um pacote por criança ----------------
 
-/** Cria o documento na ZapSign e guarda os links de assinatura. */
-signaturesRouter.post("/zapsign", asyncHandler(async (req, res) => {
-  if (!zapsignEnabled()) throw new HttpError(400, "ZapSign não configurada no servidor");
-  const data = requestSchema.parse(req.body);
-  const student = await prisma.student.findUniqueOrThrow({ where: { id: data.studentId } });
-  assertUnitAccess(req.user!, student.unitId);
-  const rule = SIGN_RULES[data.type];
-  if (!isRequired(data.type, student)) throw new HttpError(400, "Essa criança não tem entrega de material registrada (Anexo V)");
-  if (rule.guardian && !student.guardianName) throw new HttpError(400, "Cadastre o nome do responsável antes (Crianças → Editar)");
+const packageSchema = z.object({
+  studentId: z.string().min(1),
+  year: z.coerce.number().int().min(2000),
+  month: z.coerce.number().int().min(1).max(12),
+  whatsapp: z.boolean().optional(),
+});
 
-  const month = await loadMonth(student.unitId, data.year, data.month);
-  month.rows = month.rows.filter((r) => r.student.id === student.id);
-  if (!month.rows.length) throw new HttpError(400, "Essa criança não está matriculada nesse mês");
-  const pdf = await anexoPdfByType(data.type, month);
-
-  const wanted = [
-    ...(rule.guardian ? [{ role: "responsável" as const, name: student.guardianName!, phone: student.guardianPhone }] : []),
-    ...(rule.school ? [{ role: "escola" as const, name: month.unit.legalRepName, phone: null }] : []),
-  ];
-  const doc = await createDoc({
-    name: `${rule.label} - ${student.name}${rule.monthly ? ` - ${String(data.month).padStart(2, "0")}/${data.year}` : ""}`,
-    pdf,
-    externalId: `${student.id}:${data.type}:${data.year}-${data.month}`,
-    signers: wanted,
-  });
-  const signers: RequestSigner[] = wanted.map((w, i) => {
-    const z = doc.signers.find((s) => s.external_id === w.role) ?? doc.signers[i];
-    return { role: w.role, name: w.name, url: z?.sign_url ?? "", status: z?.status ?? "new", signedAt: z?.signed_at ?? null };
-  });
-  if (signers.some((s) => !s.url)) throw new HttpError(502, "A ZapSign não devolveu os links de assinatura");
-
-  const key = { studentId: student.id, type: data.type, year: rule.monthly ? data.year : null, month: rule.monthly ? data.month : null };
-  const created = await prisma.$transaction(async (tx) => {
-    await tx.signRequest.deleteMany({ where: { ...key, status: { not: "ASSINADO" } } });
-    return tx.signRequest.create({ data: { ...key, unitId: student.unitId, externalId: doc.token, signers: signers as never } });
-  });
-  res.status(201).json(created);
-}));
-
-/** Busca na ZapSign quem já assinou; quando todos assinaram, guarda o PDF assinado. */
-async function refreshRequest(id: string, userId: string) {
-  const r = await prisma.signRequest.findUniqueOrThrow({ where: { id } });
-  if (r.status === "ASSINADO") return r;
-  const doc = await getDoc(r.externalId);
-  const old = r.signers as unknown as RequestSigner[];
-  const signers = old.map((s, i) => {
-    const z = doc.signers.find((x) => x.external_id === s.role) ?? doc.signers[i];
-    return z ? { ...s, status: z.status, signedAt: z.signed_at ?? null, url: z.sign_url || s.url } : s;
-  });
-  const status = requestStatus(doc);
-  if (status === "ASSINADO") {
-    if (!doc.signed_file) {
-      // a ZapSign ainda está gerando o PDF final
-      return prisma.signRequest.update({ where: { id }, data: { signers: signers as never } });
-    }
-    const file = await downloadSignedFile(doc.signed_file);
-    const student = await prisma.student.findUniqueOrThrow({ where: { id: r.studentId } });
-    const docKey = { studentId: r.studentId, type: r.type, year: r.year, month: r.month };
-    return prisma.$transaction(async (tx) => {
-      await tx.signedDocument.deleteMany({ where: docKey });
-      await tx.signedDocument.create({
-        data: {
-          ...docKey,
-          unitId: r.unitId,
-          fileName: `${SIGN_RULES[r.type].label} - ${student.name} (ZapSign).pdf`,
-          size: file.length,
-          data: file,
-          method: "PLATAFORMA",
-          signatures: signers.map((s) => ({ name: s.name, cpf: null, signedAt: s.signedAt, integrity: "ok", role: s.role })) as never,
-          uploadedById: userId,
-        },
-      });
-      return tx.signRequest.update({ where: { id }, data: { status, signers: signers as never, completedAt: new Date() } });
-    });
-  }
-  return prisma.signRequest.update({ where: { id }, data: { status, signers: signers as never } });
+function requireZapsign() {
+  if (!zapsignEnabled()) throw new HttpError(400, "ZapSign não configurada no servidor (ZAPSIGN_API_TOKEN)");
 }
 
-signaturesRouter.post("/zapsign/:id/refresh", asyncHandler(async (req, res) => {
-  const r = await prisma.signRequest.findUniqueOrThrow({ where: { id: req.params.id }, select: { unitId: true } });
-  assertUnitAccess(req.user!, r.unitId);
-  res.json(await refreshRequest(req.params.id, req.user!.id));
+/** Todos os anexos pendentes da criança num documento só da ZapSign. */
+signaturesRouter.post("/zapsign/package", asyncHandler(async (req, res) => {
+  requireZapsign();
+  const data = packageSchema.parse(req.body);
+  const student = await prisma.student.findUniqueOrThrow({ where: { id: data.studentId }, select: { unitId: true } });
+  assertUnitAccess(req.user!, student.unitId);
+  res.status(201).json(await createPackage(data.studentId, data.year, data.month, { whatsapp: data.whatsapp }));
 }));
 
-/** Atualiza todos os pedidos abertos das crianças da unidade no mês. */
-signaturesRouter.post("/zapsign/refresh", asyncHandler(async (req, res) => {
+/** Cria os pacotes de todas as crianças com pendência da unidade no mês. */
+signaturesRouter.post("/zapsign/send-unit", asyncHandler(async (req, res) => {
+  requireZapsign();
   const { unitId, year, month } = monthQuery(req.body ?? {});
   assertUnitAccess(req.user!, unitId);
-  const { rows } = await loadSignatureStatus(unitId, year, month);
-  const ids = rows.flatMap((r) => r.items.filter((i) => i.request?.status === "PENDENTE").map((i) => i.request!.id));
-  let signed = 0;
-  const errors: string[] = [];
-  for (const id of ids) {
-    try {
-      if ((await refreshRequest(id, req.user!.id)).status === "ASSINADO") signed++;
-    } catch (err) {
-      errors.push(err instanceof Error ? err.message : String(err));
-    }
-  }
-  res.json({ checked: ids.length, signed, errors: [...new Set(errors)] });
+  const summary: SendSummary = { sent: 0, skipped: [], errors: [] };
+  await sendUnit(unitId, year, month, { whatsapp: !!req.body?.whatsapp }, summary);
+  res.json(summary);
+}));
+
+signaturesRouter.post("/zapsign/:id/refresh", asyncHandler(async (req, res) => {
+  requireZapsign();
+  const r = await prisma.signRequest.findUniqueOrThrow({ where: { id: req.params.id }, select: { unitId: true } });
+  assertUnitAccess(req.user!, r.unitId);
+  const updated = await refreshRequest(req.params.id, req.user!.id);
+  res.json({ id: updated.id, status: updated.status });
+}));
+
+/** Atualiza todos os pedidos abertos da unidade. */
+signaturesRouter.post("/zapsign/refresh", asyncHandler(async (req, res) => {
+  requireZapsign();
+  const { unitId } = monthQuery(req.body ?? {});
+  assertUnitAccess(req.user!, unitId);
+  res.json(await refreshOpen({ unitId }));
 }));
 
 signaturesRouter.delete("/zapsign/:id", asyncHandler(async (req, res) => {
@@ -330,4 +200,18 @@ signaturesRouter.delete("/zapsign/:id", asyncHandler(async (req, res) => {
   assertUnitAccess(req.user!, r.unitId);
   await prisma.signRequest.delete({ where: { id: r.id } });
   res.status(204).end();
+}));
+
+/**
+ * Aviso da ZapSign (webhook) quando alguém assina. Não confia no conteúdo:
+ * só usa o token do documento para conferir direto na API da ZapSign.
+ */
+export const zapsignWebhookRouter = Router();
+zapsignWebhookRouter.post("/", asyncHandler(async (req, res) => {
+  const token = String(req.body?.token ?? req.body?.doc_token ?? req.body?.document?.token ?? "");
+  if (token && zapsignEnabled()) {
+    const r = await prisma.signRequest.findFirst({ where: { externalId: token, status: { not: "ASSINADO" } }, select: { id: true } });
+    if (r) await refreshRequest(r.id, null).catch((err) => console.error("webhook ZapSign:", err));
+  }
+  res.json({ ok: true });
 }));

@@ -36,7 +36,8 @@ ou no papel na escola (o gestor digitaliza e anexa).
 2. **Feito** — Anexos II, III, IV, V e XI (cardápio + cálculo da alimentação).
 3. **Feito** — Painel de assinaturas, envio dos PDFs assinados (papel ou digital), leitura de quem assinou,
    guarda das vias (II a V valem para os meses seguintes), aviso pelo WhatsApp e os assinados juntos.
-   **Feito (em teste)** — assinatura pelo celular pela ZapSign (a prefeitura aceita assinatura por plataforma).
+   **Feito (em teste)** — assinatura pelo celular pela ZapSign (a prefeitura aceita assinatura por plataforma):
+   um link por criança com todos os documentos, envio para a unidade inteira e envio automático no dia escolhido.
    Falta: testar no sandbox da ZapSign com documento real e, aprovado, trocar para o ambiente de produção.
 5. Nota fiscal: texto da discriminação calculado; anexar o PDF da nota.
 6. Certidões com validade e aviso de vencimento; comprovantes mensais de FGTS e INSS.

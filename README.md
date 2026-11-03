@@ -25,9 +25,13 @@ com a nota fiscal.
   - II, III, IV e V ficam guardados e valem para os meses seguintes; o I é todo mês.
   - "Baixar para assinar" gera o anexo de uma criança só; "Assinados, juntos" monta o arquivo para a prefeitura.
   - Botão "Avisar no WhatsApp" com a mensagem pronta para o responsável.
-  - **Assinatura pelo celular (ZapSign)**: com `ZAPSIGN_API_TOKEN` configurado, cada anexo ganha
-    "Criar link de assinatura"; o link do responsável vai na mensagem do WhatsApp, e "Atualizar" traz o PDF
-    assinado quando todos assinarem. `ZAPSIGN_API_URL` padrão = ambiente de testes (sem validade jurídica).
+  - **Assinatura pelo celular (ZapSign)**: com `ZAPSIGN_API_TOKEN` configurado, **um link por criança** com todos
+    os anexos pendentes dela num documento só — o responsável assina uma vez. Quando volta assinado, cada anexo é
+    separado (páginas dele + relatório de assinaturas) e o original completo fica guardado.
+    "Enviar para todos com pendência" cria os links da unidade de uma vez (a ZapSign pode mandar o convite no WhatsApp).
+    O sistema confere as assinaturas a cada 3 h e na hora, se o webhook da ZapSign estiver ligado
+    (`/api/webhooks/zapsign`). `ZAPSIGN_API_URL` padrão = ambiente de testes (sem validade jurídica).
+  - **Envio automático** (Configurações): no dia escolhido do mês, cria os links de todas as unidades ativas.
   - O arquivo "Assinados, juntos" leva os PDFs originais assinados **anexados dentro dele** (painel de anexos
     do leitor de PDF), intactos — a assinatura de cada um continua conferível no arquivo único.
   - Os PDFs assinados ficam guardados no banco de dados (acompanhe o espaço do banco no Render).

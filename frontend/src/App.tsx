@@ -9,6 +9,7 @@ import { UnitsPage } from "./pages/UnitsPage";
 import { UsersPage } from "./pages/UsersPage";
 import { MenuPage } from "./pages/MenuPage";
 import { SignaturesPage } from "./pages/SignaturesPage";
+import { SettingsPage } from "./pages/SettingsPage";
 
 export function App() {
   const { user, loading } = useAuth();
@@ -24,6 +25,7 @@ export function App() {
         <Route path="assinaturas" element={<SignaturesPage />} />
         {user?.role === "FINANCEIRO" && <Route path="unidades" element={<UnitsPage />} />}
         {user?.role === "FINANCEIRO" && <Route path="usuarios" element={<UsersPage />} />}
+        {user?.role === "FINANCEIRO" && <Route path="configuracoes" element={<SettingsPage />} />}
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
