@@ -8,6 +8,7 @@ import { StudentsPage } from "./pages/StudentsPage";
 import { UnitsPage } from "./pages/UnitsPage";
 import { UsersPage } from "./pages/UsersPage";
 import { MenuPage } from "./pages/MenuPage";
+import { SignaturesPage } from "./pages/SignaturesPage";
 
 export function App() {
   const { user, loading } = useAuth();
@@ -20,6 +21,7 @@ export function App() {
         <Route path="frequencia" element={<AttendancePage />} />
         <Route path="criancas" element={<StudentsPage />} />
         <Route path="cardapio" element={<MenuPage />} />
+        <Route path="assinaturas" element={<SignaturesPage />} />
         {user?.role === "FINANCEIRO" && <Route path="unidades" element={<UnitsPage />} />}
         {user?.role === "FINANCEIRO" && <Route path="usuarios" element={<UsersPage />} />}
       </Route>

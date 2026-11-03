@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Building2, CalendarCheck, LayoutDashboard, LogOut, Users, Baby, Utensils } from "lucide-react";
+import { Building2, CalendarCheck, LayoutDashboard, LogOut, Users, Baby, Utensils, PenLine } from "lucide-react";
 import { useAuth } from "../lib/auth";
 
 export function Layout() {
@@ -7,6 +7,7 @@ export function Layout() {
   const links = [
     { to: "/", label: "Painel do mês", icon: LayoutDashboard },
     { to: "/frequencia", label: "Frequência e anexos", icon: CalendarCheck },
+    { to: "/assinaturas", label: "Assinaturas", icon: PenLine },
     { to: "/criancas", label: "Crianças", icon: Baby },
     { to: "/cardapio", label: "Cardápio", icon: Utensils },
     ...(user?.role === "FINANCEIRO"

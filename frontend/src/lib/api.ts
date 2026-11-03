@@ -25,7 +25,7 @@ export function errorMessage(err: unknown): string {
 }
 
 /** Baixa um arquivo da API (PDF/Excel) com o token. */
-export async function download(url: string, params: Record<string, unknown>) {
+export async function download(url: string, params: Record<string, unknown> = {}): Promise<Record<string, string>> {
   try {
     const res = await api.get(url, { params, responseType: "blob" });
     const disposition = String(res.headers["content-disposition"] ?? "");
@@ -35,6 +35,7 @@ export async function download(url: string, params: Record<string, unknown>) {
     link.download = name;
     link.click();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    return res.headers as Record<string, string>;
   } catch (err) {
     // erro vem como blob: lê a mensagem do JSON
     const blob = (err as { response?: { data?: Blob } }).response?.data;

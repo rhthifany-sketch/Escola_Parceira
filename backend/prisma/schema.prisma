@@ -14,15 +14,16 @@ enum UserRole {
 }
 
 model User {
-  id           String   @id @default(cuid())
+  id           String           @id @default(cuid())
   name         String
-  email        String   @unique
-  passwordHash String   @map("password_hash")
+  email        String           @unique
+  passwordHash String           @map("password_hash")
   role         UserRole
-  unitId       String?  @map("unit_id")
-  unit         Unit?    @relation(fields: [unitId], references: [id])
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now()) @map("created_at")
+  unitId       String?          @map("unit_id")
+  unit         Unit?            @relation(fields: [unitId], references: [id])
+  active       Boolean          @default(true)
+  createdAt    DateTime         @default(now()) @map("created_at")
+  signedDocs   SignedDocument[]
 
   @@map("users")
 }
@@ -30,22 +31,23 @@ model User {
 /// Escola parceira (unidade). Os dados da instituição e do representante
 /// legal preenchem os Anexos I e III.
 model Unit {
-  id            String          @id @default(cuid())
-  name          String          @unique
-  legalName     String          @map("legal_name")
-  cnpj          String
-  legalRepName  String          @map("legal_rep_name")
-  legalRepCpf   String          @map("legal_rep_cpf")
+  id             String           @id @default(cuid())
+  name           String           @unique
+  legalName      String           @map("legal_name")
+  cnpj           String
+  legalRepName   String           @map("legal_rep_name")
+  legalRepCpf    String           @map("legal_rep_cpf")
   /// Profissional que atende os responsáveis (Anexo II).
-  attendantName String?         @map("attendant_name")
-  attendantCpf  String?         @map("attendant_cpf")
+  attendantName  String?          @map("attendant_name")
+  attendantCpf   String?          @map("attendant_cpf")
   /// Cardápio das semanas A a D (Anexo XI) — ver src/lib/menu.ts.
-  menu          Json?
-  active        Boolean         @default(true)
-  createdAt     DateTime        @default(now()) @map("created_at")
-  students      Student[]
-  months        MonthlyReport[]
-  users         User[]
+  menu           Json?
+  active         Boolean          @default(true)
+  createdAt      DateTime         @default(now()) @map("created_at")
+  students       Student[]
+  months         MonthlyReport[]
+  users          User[]
+  SignedDocument SignedDocument[]
 
   @@map("units")
 }
@@ -53,25 +55,26 @@ model Unit {
 /// Criança do programa. As colunas seguem o Anexo X; o responsável é quem
 /// assina os Anexos I (ciente), II, IV e V.
 model Student {
-  id                  String       @id @default(cuid())
-  unitId              String       @map("unit_id")
-  unit                Unit         @relation(fields: [unitId], references: [id])
+  id                  String           @id @default(cuid())
+  unitId              String           @map("unit_id")
+  unit                Unit             @relation(fields: [unitId], references: [id])
   name                String
   shift               String
   grei                String
-  birthDate           DateTime?    @map("birth_date") @db.Date
+  birthDate           DateTime?        @map("birth_date") @db.Date
   phone               String?
   address             String?
   email               String?
-  enrollmentDate      DateTime     @map("enrollment_date") @db.Date
-  exitDate            DateTime?    @map("exit_date") @db.Date
-  guardianName        String?      @map("guardian_name")
-  guardianCpf         String?      @map("guardian_cpf")
-  guardianPhone       String?      @map("guardian_phone")
+  enrollmentDate      DateTime         @map("enrollment_date") @db.Date
+  exitDate            DateTime?        @map("exit_date") @db.Date
+  guardianName        String?          @map("guardian_name")
+  guardianCpf         String?          @map("guardian_cpf")
+  guardianPhone       String?          @map("guardian_phone")
   /// Entrega do material didático e uniforme (Anexo V, taxa única por aluno).
-  materialDeliveredAt DateTime?    @map("material_delivered_at") @db.Date
-  createdAt           DateTime     @default(now()) @map("created_at")
+  materialDeliveredAt DateTime?        @map("material_delivered_at") @db.Date
+  createdAt           DateTime         @default(now()) @map("created_at")
   attendances         Attendance[]
+  SignedDocument      SignedDocument[]
 
   @@index([unitId, name])
   @@map("students")
@@ -103,4 +106,44 @@ model Attendance {
 
   @@unique([reportId, studentId])
   @@map("attendances")
+}
+
+enum SignedDocType {
+  ANEXO_I
+  ANEXO_II
+  ANEXO_III
+  ANEXO_IV
+  ANEXO_V
+}
+
+/// PAPEL = assinado à mão e digitalizado; DIGITAL = PDF com assinatura eletrônica.
+enum SignMethod {
+  PAPEL
+  DIGITAL
+}
+
+/// Anexo assinado de uma criança. O Anexo I é por mês (year/month); os
+/// outros são assinados uma vez (year/month nulos) e valem para todos os meses.
+model SignedDocument {
+  id           String        @id @default(cuid())
+  unitId       String        @map("unit_id")
+  unit         Unit          @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  studentId    String        @map("student_id")
+  student      Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  type         SignedDocType
+  year         Int?
+  month        Int?
+  fileName     String        @map("file_name")
+  size         Int
+  data         Bytes
+  method       SignMethod
+  /// Assinaturas lidas do PDF na hora do envio (ver src/lib/pdfSignatures.ts).
+  signatures   Json          @default("[]")
+  uploadedById String?       @map("uploaded_by_id")
+  uploadedBy   User?         @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  uploadedAt   DateTime      @default(now()) @map("uploaded_at")
+
+  @@index([studentId, type])
+  @@index([unitId, type, year, month])
+  @@map("signed_documents")
 }

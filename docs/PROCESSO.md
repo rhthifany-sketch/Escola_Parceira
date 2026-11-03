@@ -34,9 +34,10 @@ ou no papel na escola (o gestor digitaliza e anexa).
 
 1. **Feito** — Cadastro (unidades, crianças, responsáveis, usuários), frequência do mês, Anexo I e Anexo X.
 2. **Feito** — Anexos II, III, IV, V e XI (cardápio + cálculo da alimentação).
-   Falta: guardar as vias assinadas dos Anexos II, III e IV e reaproveitar todo mês.
-3. Assinatura: link por criança para o responsável (baixar o PDF, assinar no gov.br, devolver);
-   conferência da assinatura; botão "enviar pelo WhatsApp" com a mensagem pronta; painel de quem falta.
+3. **Feito** — Painel de assinaturas, envio dos PDFs assinados (papel ou digital), leitura de quem assinou,
+   guarda das vias (II a V valem para os meses seguintes), aviso pelo WhatsApp e os assinados juntos.
+   Em aberto: assinatura pelo celular sem baixar nada, integrando com uma plataforma de assinatura
+   (ZapSign, Clicksign, Autentique…) — depende de a prefeitura aceitar esse tipo de assinatura.
 5. Nota fiscal: texto da discriminação calculado; anexar o PDF da nota.
 6. Certidões com validade e aviso de vencimento; comprovantes mensais de FGTS e INSS.
 7. Pacote final por unidade (PDFs juntados e nomeados) + e-mail pronto; controle do prazo do 5º dia útil.

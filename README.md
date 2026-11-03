@@ -19,6 +19,13 @@ com a nota fiscal.
   - **ANEXO 5**: só as crianças com entrega de material e uniforme no mês (data da entrega no cadastro da criança).
   - **ANEXO 10** (PDF e Excel): relatório mensal da unidade.
   - **ANEXO 11**: cardápio das semanas A a D (tela Cardápio, preenchido uma vez) + cálculo da alimentação.
+- **Assinaturas**: painel por criança e mês (Anexos I a V), com o que falta de cada uma.
+  - Envio do PDF assinado (escaneado do papel ou assinado no gov.br). No PDF digital o sistema lê quem assinou
+    (nome e CPF do certificado) e se o arquivo foi alterado depois.
+  - II, III, IV e V ficam guardados e valem para os meses seguintes; o I é todo mês.
+  - "Baixar para assinar" gera o anexo de uma criança só; "Assinados, juntos" monta o arquivo para a prefeitura.
+  - Botão "Avisar no WhatsApp" com a mensagem pronta para o responsável.
+  - Os PDFs assinados ficam guardados no banco de dados (acompanhe o espaço do banco no Render).
 - **Editar e excluir** crianças (uma ou várias), unidades e usuários.
 - **Painel do mês**: a situação de cada unidade (frequência lançada, abaixo de 60%, cadastro incompleto).
 

@@ -8,6 +8,7 @@ import { isMenuEmpty, mealTotal, normalizeMenu } from "../lib/menu";
 import { anexoIIPdf, anexoIIIPdf, anexoIVPdf, anexoVPdf } from "../documents/declaracoes";
 import { anexoXIPdf } from "../documents/anexoXI";
 import type { Student } from "@prisma/client";
+import { loadSignatureStatus } from "./signatures";
 import { loadMonth } from "../documents/monthData";
 import { anexoIPdf } from "../documents/anexoI";
 import { anexoXPdf, anexoXXlsx } from "../documents/anexoX";
@@ -133,16 +134,25 @@ monthsRouter.get("/overview", asyncHandler(async (req, res) => {
       updatedAt: report?.updatedAt ?? null,
       belowMinimum: data.rows.filter((r) => belowMinimum(r.frequency)).length,
       pendingRegistration: data.rows.filter((r) => pendingFields(r.student).length > 0).length,
+      signaturesComplete: data.rows.length ? (await loadSignatureStatus(unit.id, year, month)).rows.filter((r) => r.complete).length : 0,
     });
   }
   res.json(result);
 }));
 
+/** ?studentId=… gera o anexo só daquela criança (para imprimir e assinar). */
 async function readyMonth(req: Request) {
   const { unitId, year, month } = monthParams(req);
   const data = await loadMonth(unitId, year, month);
-  if (data.rows.length === 0) throw new HttpError(400, "Nenhuma criança matriculada nesse mês");
+  const studentId = req.query.studentId ? String(req.query.studentId) : null;
+  if (studentId) data.rows = data.rows.filter((r) => r.student.id === studentId);
+  if (data.rows.length === 0) throw new HttpError(400, studentId ? "Essa criança não está matriculada nesse mês" : "Nenhuma criança matriculada nesse mês");
   return data;
+}
+
+/** "ANEXO 1.pdf", ou "ANEXO 1 - Nome da Criança.pdf" quando é de uma criança só. */
+function docName(req: Request, data: { rows: { student: { name: string } }[] }, base: string) {
+  return req.query.studentId ? `${base} - ${data.rows[0].student.name}.pdf` : `${base}.pdf`;
 }
 
 function send(res: import("express").Response, buffer: Buffer, fileName: string, type: string) {
@@ -153,7 +163,8 @@ function send(res: import("express").Response, buffer: Buffer, fileName: string,
 
 // Nome do arquivo = tipo do documento, como a prefeitura pede ("ANEXO 1", "ANEXO 10")
 monthsRouter.get("/anexo-1.pdf", asyncHandler(async (req, res) => {
-  send(res, await anexoIPdf(await readyMonth(req)), "ANEXO 1.pdf", "application/pdf");
+  const data = await readyMonth(req);
+  send(res, await anexoIPdf(data), docName(req, data, "ANEXO 1"), "application/pdf");
 }));
 
 monthsRouter.get("/anexo-10.pdf", asyncHandler(async (req, res) => {
@@ -164,23 +175,26 @@ monthsRouter.get("/anexo-10.pdf", asyncHandler(async (req, res) => {
 
 monthsRouter.get("/anexo-2.pdf", asyncHandler(async (req, res) => {
   const data = await readyMonth(req);
-  send(res, await anexoIIPdf(data.unit, data.year, data.rows.map((r) => r.student)), "ANEXO 2.pdf", "application/pdf");
+  send(res, await anexoIIPdf(data.unit, data.year, data.rows.map((r) => r.student)), docName(req, data, "ANEXO 2"), "application/pdf");
 }));
 
 monthsRouter.get("/anexo-3.pdf", asyncHandler(async (req, res) => {
   const data = await readyMonth(req);
-  send(res, await anexoIIIPdf(data.unit, data.rows.map((r) => r.student)), "ANEXO 3.pdf", "application/pdf");
+  send(res, await anexoIIIPdf(data.unit, data.rows.map((r) => r.student)), docName(req, data, "ANEXO 3"), "application/pdf");
 }));
 
 monthsRouter.get("/anexo-4.pdf", asyncHandler(async (req, res) => {
   const data = await readyMonth(req);
-  send(res, await anexoIVPdf(data.unit, data.rows.map((r) => r.student)), "ANEXO 4.pdf", "application/pdf");
+  send(res, await anexoIVPdf(data.unit, data.rows.map((r) => r.student)), docName(req, data, "ANEXO 4"), "application/pdf");
 }));
 
 // Anexo V: só quem recebeu material e uniforme no mês (taxa única por aluno)
 monthsRouter.get("/anexo-5.pdf", asyncHandler(async (req, res) => {
   const data = await readyMonth(req);
-  const students = materialDelivered(data.rows.map((r) => r.student), data.year, data.month);
+  // de uma criança só (para assinar): vale a entrega de qualquer mês
+  const students = req.query.studentId
+    ? data.rows.map((r) => r.student).filter((s) => s.materialDeliveredAt)
+    : materialDelivered(data.rows.map((r) => r.student), data.year, data.month);
   if (students.length === 0) {
     throw new HttpError(
       400,
@@ -188,7 +202,7 @@ monthsRouter.get("/anexo-5.pdf", asyncHandler(async (req, res) => {
         "Informe a data de entrega no cadastro da criança (Crianças → Editar)."
     );
   }
-  send(res, await anexoVPdf(data.unit, students), "ANEXO 5.pdf", "application/pdf");
+  send(res, await anexoVPdf(data.unit, students), docName(req, data, "ANEXO 5"), "application/pdf");
 }));
 
 monthsRouter.get("/anexo-11.pdf", asyncHandler(async (req, res) => {

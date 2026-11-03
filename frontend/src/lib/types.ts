@@ -71,6 +71,7 @@ export interface OverviewRow {
   updatedAt: string | null;
   belowMinimum: number;
   pendingRegistration: number;
+  signaturesComplete: number;
 }
 
 export const MONTHS = [
@@ -80,3 +81,40 @@ export const MONTHS = [
 
 /** "2026-03-15T00:00:00.000Z" → "15/03/2026" (datas sem fuso). */
 export const formatDate = (iso: string | null) => (iso ? iso.slice(0, 10).split("-").reverse().join("/") : "");
+
+export type DocType = "ANEXO_I" | "ANEXO_II" | "ANEXO_III" | "ANEXO_IV" | "ANEXO_V";
+
+export interface PdfSignature {
+  name: string;
+  cpf: string | null;
+  signedAt: string | null;
+  integrity: "ok" | "alterado" | "desconhecido";
+}
+
+export interface SignatureItem {
+  type: DocType;
+  label: string;
+  needsGuardian: boolean;
+  needsSchool: boolean;
+  doc: {
+    id: string;
+    fileName: string;
+    method: "PAPEL" | "DIGITAL";
+    signatures: PdfSignature[];
+    uploadedAt: string;
+    uploadedBy: string | null;
+  } | null;
+  complete: boolean;
+  missing: ("responsável" | "escola")[];
+  altered: boolean;
+}
+
+export interface SignatureRow {
+  studentId: string;
+  name: string;
+  guardianName: string | null;
+  guardianPhone: string | null;
+  complete: boolean;
+  items: SignatureItem[];
+  whatsapp: string | null;
+}

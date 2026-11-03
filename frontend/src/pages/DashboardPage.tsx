@@ -31,6 +31,7 @@ export function DashboardPage() {
               <Th>Frequência</Th>
               <Th className="text-right">Abaixo de 60%</Th>
               <Th className="text-right">Cadastro incompleto</Th>
+              <Th className="text-right">Assinaturas completas</Th>
               <Th />
             </tr>
           </thead>
@@ -59,6 +60,14 @@ export function DashboardPage() {
                 </Td>
                 <Td className={`text-right ${u.belowMinimum ? "font-semibold text-red-700" : ""}`}>{u.belowMinimum}</Td>
                 <Td className={`text-right ${u.pendingRegistration ? "text-amber-700" : ""}`}>{u.pendingRegistration}</Td>
+                <Td className="text-right">
+                  <Link
+                    className={u.students && u.signaturesComplete === u.students ? "text-green-700" : "text-slate-700 hover:underline"}
+                    to={`/assinaturas?unidade=${u.unitId}&ano=${year}&mes=${month}`}
+                  >
+                    {u.signaturesComplete} de {u.students}
+                  </Link>
+                </Td>
                 <Td className="text-right">
                   <Link className="text-orange-700 hover:underline" to={`/frequencia?unidade=${u.unitId}&ano=${year}&mes=${month}`}>
                     Abrir
