@@ -22,6 +22,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const r = await api.post<{ token: string; user: User }>("/auth/login", { email, password });
+    // resposta sem token = o site não está falando com a API (VITE_API_URL errada)
+    if (!r.data?.token) {
+      throw new Error(`O servidor não respondeu como esperado. Confira se VITE_API_URL aponta para a API (hoje: ${api.defaults.baseURL}).`);
+    }
     localStorage.setItem("token", r.data.token);
     setUser(r.data.user);
   };
