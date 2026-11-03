@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Download, MessageCircle, Upload } from "lucide-react";
+import { Copy, Download, ExternalLink, MessageCircle, RefreshCw, Smartphone, Upload } from "lucide-react";
 import { api, download, errorMessage } from "../lib/api";
 import { usePeriod } from "../lib/period";
 import { MONTHS, type DocType, type SignatureItem, type SignatureRow } from "../lib/types";
@@ -23,6 +23,11 @@ function chip(item: SignatureItem) {
   if (item.complete) return { text: "Assinado", cls: "bg-green-50 text-green-700 border-green-200" };
   if (item.altered) return { text: "Arquivo alterado", cls: "bg-red-50 text-red-700 border-red-200" };
   if (item.doc) return { text: `Falta ${item.missing.join(" e ")}`, cls: "bg-amber-50 text-amber-800 border-amber-200" };
+  if (item.request?.status === "RECUSADO") return { text: "Recusado na ZapSign", cls: "bg-red-50 text-red-700 border-red-200" };
+  if (item.request) {
+    const done = item.request.signers.filter((s) => s.status === "signed").length;
+    return { text: `No celular (${done}/${item.request.signers.length})`, cls: "bg-blue-50 text-blue-700 border-blue-200" };
+  }
   return { text: "Pendente", cls: "bg-slate-50 text-slate-600 border-slate-200" };
 }
 
@@ -35,7 +40,21 @@ export function SignaturesPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["signatures", unitId, year, month],
     enabled: !!unitId,
-    queryFn: async () => (await api.get<{ rows: SignatureRow[]; maxMb: number }>("/signatures", { params })).data,
+    queryFn: async () => (await api.get<{ rows: SignatureRow[]; maxMb: number; zapsign: { sandbox: boolean } | null }>("/signatures", { params })).data,
+  });
+  const refreshAll = useMutation({
+    mutationFn: async () => (await api.post<{ checked: number; signed: number; errors: string[] }>("/signatures/zapsign/refresh", params)).data,
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ["signatures", unitId, year, month] });
+      queryClient.invalidateQueries({ queryKey: ["overview"] });
+      setMessage({
+        tone: r.errors.length ? "error" : "success",
+        text: r.checked
+          ? `${r.checked} pedido(s) conferido(s) na ZapSign, ${r.signed} concluído(s).${r.errors.length ? ` Erro: ${r.errors.join("; ")}` : ""}`
+          : "Nenhum pedido aberto na ZapSign neste mês.",
+      });
+    },
+    onError: (err) => setMessage({ tone: "error", text: errorMessage(err) }),
   });
   const rows = data?.rows ?? [];
   const done = rows.filter((r) => r.complete).length;
@@ -84,6 +103,19 @@ export function SignaturesPage() {
               ))}
             </div>
           </Card>
+          {data.zapsign && (
+            <Card className="flex flex-wrap items-center gap-3 border-blue-200 bg-blue-50/50">
+              <Smartphone size={18} className="text-blue-700" />
+              <div className="text-sm text-slate-700">
+                <strong>Assinatura pelo celular (ZapSign)</strong>
+                {data.zapsign.sandbox && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">ambiente de TESTE — sem validade jurídica</span>}
+                <div className="text-xs text-slate-500">Abra um anexo e clique em “Criar link de assinatura”. Depois que assinarem, clique em Atualizar.</div>
+              </div>
+              <Button variant="secondary" className="ml-auto" onClick={() => refreshAll.mutate()} disabled={refreshAll.isPending}>
+                <RefreshCw size={14} /> {refreshAll.isPending ? "Conferindo…" : "Atualizar assinaturas da ZapSign"}
+              </Button>
+            </Card>
+          )}
           {message && <Alert tone={message.tone}>{message.text}</Alert>}
           <Card className="overflow-x-auto p-0">
             <table className="w-full text-sm">
@@ -145,6 +177,7 @@ export function SignaturesPage() {
           item={open.item}
           params={params}
           maxMb={data?.maxMb ?? 10}
+          zapsign={!!data?.zapsign}
           onClose={() => setOpen(null)}
           onChanged={(item) => {
             queryClient.invalidateQueries({ queryKey: ["signatures", unitId, year, month] });
@@ -163,6 +196,7 @@ function DocModal({
   item,
   params,
   maxMb,
+  zapsign,
   onClose,
   onChanged,
 }: {
@@ -170,6 +204,7 @@ function DocModal({
   item: SignatureItem;
   params: { unitId: string; year: number; month: number };
   maxMb: number;
+  zapsign: boolean;
   onClose: () => void;
   onChanged: (item: SignatureItem | null) => void;
 }) {
@@ -197,6 +232,43 @@ function DocModal({
     },
     onError: (err) => setError(errorMessage(err)),
   });
+  const reload = async () => {
+    const fresh = (await api.get<{ rows: SignatureRow[] }>("/signatures", { params })).data.rows;
+    return fresh.find((r) => r.studentId === row.studentId)?.items.find((i) => i.type === item.type) ?? null;
+  };
+  const createLink = useMutation({
+    mutationFn: async () => {
+      await api.post("/signatures/zapsign", { studentId: row.studentId, type: item.type, year: params.year, month: params.month });
+      return reload();
+    },
+    onSuccess: (fresh) => { setError(""); onChanged(fresh); },
+    onError: (err) => setError(errorMessage(err)),
+  });
+  const refresh = useMutation({
+    mutationFn: async () => {
+      await api.post(`/signatures/zapsign/${item.request!.id}/refresh`);
+      return reload();
+    },
+    onSuccess: (fresh) => { setError(""); onChanged(fresh); },
+    onError: (err) => setError(errorMessage(err)),
+  });
+  const cancelLink = useMutation({
+    mutationFn: async () => {
+      await api.delete(`/signatures/zapsign/${item.request!.id}`);
+      return reload();
+    },
+    onSuccess: (fresh) => { setError(""); onChanged(fresh); },
+    onError: (err) => setError(errorMessage(err)),
+  });
+  const [copied, setCopied] = useState("");
+  const copy = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(url);
+    } catch {
+      window.prompt("Copie o link:", url);
+    }
+  };
   const remove = useMutation({
     mutationFn: () => api.delete(`/signatures/${item.doc!.id}`),
     onSuccess: () => onChanged(null),
@@ -226,15 +298,17 @@ function DocModal({
           <div className="rounded-md border border-slate-200 p-3">
             <div className="mb-2 font-medium">Arquivo enviado</div>
             <div className="text-slate-600">
-              {item.doc.fileName} · {item.doc.method === "PAPEL" ? "assinado no papel (digitalizado)" : "assinado digitalmente"} · enviado em {dateTime(item.doc.uploadedAt)}
+              {item.doc.fileName} ·{" "}
+              {item.doc.method === "PAPEL" ? "assinado no papel (digitalizado)" : item.doc.method === "PLATAFORMA" ? "assinado pelo celular (ZapSign)" : "assinado digitalmente"} · enviado em{" "}
+              {dateTime(item.doc.uploadedAt)}
               {item.doc.uploadedBy && ` por ${item.doc.uploadedBy}`}
             </div>
-            {item.doc.method === "DIGITAL" && (
+            {item.doc.method !== "PAPEL" && (
               <ul className="mt-2 flex flex-col gap-1">
                 {item.doc.signatures.map((s, i) => (
                   <li key={i} className="flex flex-wrap gap-x-2">
                     <span className="font-medium">{s.name}</span>
-                    <span className="text-slate-500">CPF {maskCpf(s.cpf)}</span>
+                    {item.doc!.method === "DIGITAL" && <span className="text-slate-500">CPF {maskCpf(s.cpf)}</span>}
                     {s.signedAt && <span className="text-slate-500">· {dateTime(s.signedAt)}</span>}
                     {s.integrity === "alterado" && <span className="font-medium text-red-700">· arquivo alterado depois desta assinatura</span>}
                   </li>
@@ -258,8 +332,70 @@ function DocModal({
           </div>
         )}
 
+        {zapsign && !item.complete && (
+          <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3">
+            <div className="mb-1 flex items-center gap-2 font-medium">
+              <Smartphone size={16} className="text-blue-700" /> Assinar pelo celular (ZapSign)
+            </div>
+            {!item.request && (
+              <>
+                <p className="mb-3 text-slate-600">
+                  Cria o documento na ZapSign com {who} e gera um link para cada um assinar na tela do celular, sem baixar nada.
+                </p>
+                <Button onClick={() => createLink.mutate()} disabled={createLink.isPending}>
+                  {createLink.isPending ? "Criando…" : "Criar link de assinatura"}
+                </Button>
+              </>
+            )}
+            {item.request && (
+              <div className="flex flex-col gap-2">
+                {item.request.status === "RECUSADO" && <p className="font-medium text-red-700">Alguém recusou a assinatura na ZapSign. Crie um link novo se precisar.</p>}
+                {item.request.signers.map((s) => (
+                  <div key={s.role} className="flex flex-wrap items-center gap-2">
+                    <span className="w-48 truncate">
+                      <span className="font-medium">{s.role === "responsável" ? "Responsável" : "Escola"}:</span> {s.name}
+                    </span>
+                    {s.status === "signed" ? (
+                      <span className="rounded-full border border-green-200 bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+                        assinou {s.signedAt ? dateTime(s.signedAt) : ""}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600">
+                          {s.status === "link-opened" ? "abriu o link" : "aguardando"}
+                        </span>
+                        <button onClick={() => copy(s.url)} className="inline-flex items-center gap-1 text-xs text-slate-700 hover:underline">
+                          <Copy size={12} /> {copied === s.url ? "copiado!" : "copiar link"}
+                        </button>
+                        {s.role === "responsável" && row.whatsapp && (
+                          <a href={row.whatsapp} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-green-700 hover:underline">
+                            <MessageCircle size={12} /> mandar no WhatsApp
+                          </a>
+                        )}
+                        {s.role === "escola" && (
+                          <a href={s.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-700 hover:underline">
+                            <ExternalLink size={12} /> assinar agora (representante)
+                          </a>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ))}
+                <div className="mt-1 flex flex-wrap gap-2">
+                  <Button variant="secondary" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
+                    <RefreshCw size={14} /> {refresh.isPending ? "Conferindo…" : "Atualizar"}
+                  </Button>
+                  <Button variant="danger" onClick={() => confirm("Cancelar este pedido de assinatura? Os links deixam de valer aqui no sistema.") && cancelLink.mutate()} disabled={cancelLink.isPending}>
+                    Cancelar pedido
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="rounded-md bg-slate-50 p-3">
-          <div className="mb-2 font-medium">{item.doc ? "Trocar o arquivo" : "Como enviar"}</div>
+          <div className="mb-2 font-medium">{item.doc ? "Trocar o arquivo" : zapsign ? "Ou: assinar no papel / gov.br e enviar" : "Como enviar"}</div>
           <ol className="mb-3 list-decimal pl-5 text-slate-600">
             <li>Baixe o anexo desta criança e colha as assinaturas (no papel ou no gov.br).</li>
             <li>Envie o PDF assinado aqui. Papel: digitalize em PDF (não vale foto/imagem).</li>

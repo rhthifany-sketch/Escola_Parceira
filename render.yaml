@@ -33,6 +33,12 @@ services:
       # URL do site (preencher depois que ele existir)
       - key: CORS_ORIGIN
         sync: false
+      # ZapSign (assinatura pelo celular). Sem o token a função fica desligada.
+      # A URL padrão é a do ambiente de testes; em produção: https://api.zapsign.com.br/api/v1
+      - key: ZAPSIGN_API_TOKEN
+        sync: false
+      - key: ZAPSIGN_API_URL
+        value: https://sandbox.api.zapsign.com.br/api/v1
 
   - type: web
     name: escola-parceira

@@ -99,7 +99,7 @@ export interface SignatureItem {
   doc: {
     id: string;
     fileName: string;
-    method: "PAPEL" | "DIGITAL";
+    method: "PAPEL" | "DIGITAL" | "PLATAFORMA";
     signatures: PdfSignature[];
     uploadedAt: string;
     uploadedBy: string | null;
@@ -107,6 +107,14 @@ export interface SignatureItem {
   complete: boolean;
   missing: ("responsável" | "escola")[];
   altered: boolean;
+  request: SignRequestInfo | null;
+}
+
+export interface SignRequestInfo {
+  id: string;
+  status: "PENDENTE" | "ASSINADO" | "RECUSADO";
+  createdAt: string;
+  signers: { role: "responsável" | "escola"; name: string; url: string; status: string; signedAt: string | null }[];
 }
 
 export interface SignatureRow {

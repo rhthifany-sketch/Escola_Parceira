@@ -1,0 +1,102 @@
+import { HttpError } from "./http";
+
+/**
+ * Cliente da API da ZapSign (https://docs.zapsign.com.br).
+ * ZAPSIGN_API_TOKEN: token da conta (Configurações → Integração → API).
+ * ZAPSIGN_API_URL: padrão é o ambiente de testes (sandbox, sem validade
+ * jurídica); em produção, https://api.zapsign.com.br/api/v1.
+ *
+ * Os convites NÃO são enviados pela ZapSign (e-mail/WhatsApp dela têm
+ * custo): o sistema recebe o link de cada signatário e manda pelo botão
+ * de WhatsApp que já existe.
+ */
+export const SANDBOX_URL = "https://sandbox.api.zapsign.com.br/api/v1";
+
+export const zapsignConfig = () => ({
+  token: process.env.ZAPSIGN_API_TOKEN?.trim() || null,
+  url: (process.env.ZAPSIGN_API_URL?.trim() || SANDBOX_URL).replace(/\/+$/, ""),
+});
+export const zapsignEnabled = () => !!zapsignConfig().token;
+export const zapsignIsSandbox = () => zapsignConfig().url.includes("sandbox");
+
+export interface ZapSigner {
+  token: string;
+  name: string;
+  sign_url: string;
+  status: string; // "new" | "link-opened" | "signed" | …
+  signed_at?: string | null;
+  external_id?: string | null;
+}
+
+export interface ZapDoc {
+  token: string;
+  status: string; // "pending" | "signed" | "refused"
+  signed_file?: string | null;
+  signers: ZapSigner[];
+}
+
+async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const { token, url } = zapsignConfig();
+  if (!token) throw new HttpError(400, "ZapSign não configurada (falta ZAPSIGN_API_TOKEN no servidor)");
+  let res: Response;
+  try {
+    res = await fetch(`${url}${path}`, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new HttpError(502, "Não foi possível falar com a ZapSign agora. Tente de novo em alguns minutos.");
+  }
+  const text = await res.text();
+  if (!res.ok) {
+    const detail = text.slice(0, 300);
+    if (res.status === 401 || res.status === 403) throw new HttpError(502, `A ZapSign recusou o token (confira ZAPSIGN_API_TOKEN e se ele é do ambiente certo). ${detail}`);
+    throw new HttpError(502, `A ZapSign respondeu com erro ${res.status}: ${detail}`);
+  }
+  return (text ? JSON.parse(text) : {}) as T;
+}
+
+export interface NewSigner {
+  role: "responsável" | "escola";
+  name: string;
+  phone: string | null;
+}
+
+/** Cria o documento na ZapSign a partir do PDF e devolve os links de cada signatário. */
+export function createDoc(opts: { name: string; pdf: Buffer; externalId: string; signers: NewSigner[] }) {
+  return call<ZapDoc>("POST", "/docs/", {
+    name: opts.name,
+    base64_pdf: opts.pdf.toString("base64"),
+    external_id: opts.externalId,
+    lang: "pt-br",
+    disable_signer_emails: true,
+    signers: opts.signers.map((s) => {
+      const digits = (s.phone ?? "").replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "");
+      return {
+        name: s.name,
+        external_id: s.role,
+        auth_mode: "assinaturaTela",
+        send_automatic_email: false,
+        send_automatic_whatsapp: false,
+        ...(digits.length >= 10 ? { phone_country: "55", phone_number: digits } : {}),
+      };
+    }),
+  });
+}
+
+export const getDoc = (token: string) => call<ZapDoc>("GET", `/docs/${encodeURIComponent(token)}/`);
+
+/** Baixa o PDF assinado (link temporário que a ZapSign devolve). */
+export async function downloadSignedFile(url: string): Promise<Buffer> {
+  const res = await fetch(url);
+  if (!res.ok) throw new HttpError(502, `Não consegui baixar o PDF assinado da ZapSign (erro ${res.status})`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+/** Situação do pedido a partir do documento da ZapSign. */
+export function requestStatus(doc: ZapDoc): "PENDENTE" | "ASSINADO" | "RECUSADO" {
+  if (doc.status === "signed" || (doc.signers.length > 0 && doc.signers.every((s) => s.status === "signed"))) return "ASSINADO";
+  if (doc.status === "refused") return "RECUSADO";
+  return "PENDENTE";
+}

@@ -41,7 +41,8 @@ export function evaluateDoc(
 ): DocEvaluation {
   const rule = SIGN_RULES[type];
   const altered = doc.signatures.some((s) => s.integrity === "alterado");
-  if (doc.method === "PAPEL") return { complete: !altered, missing: [], altered };
+  // papel: a escola atesta; plataforma: a ZapSign confirmou que todos assinaram
+  if (doc.method === "PAPEL" || doc.method === "PLATAFORMA") return { complete: !altered, missing: [], altered };
   const valid = doc.signatures.filter((s) => s.integrity !== "alterado");
   const missing: DocEvaluation["missing"] = [];
   if (rule.guardian && !valid.some((s) => signedBy(s, guardian))) missing.push("responsável");
@@ -54,8 +55,26 @@ export const isRequired = (type: SignedDocType, student: { materialDeliveredAt: 
   type !== "ANEXO_V" || student.materialDeliveredAt !== null;
 
 /** Mensagem do WhatsApp para chamar o responsável. */
-export function whatsappMessage(opts: { guardianName: string | null; studentName: string; unitName: string; pending: string[]; monthLabel: string }) {
+export function whatsappMessage(opts: {
+  guardianName: string | null;
+  studentName: string;
+  unitName: string;
+  pending: string[];
+  monthLabel: string;
+  /** links de assinatura pelo celular (ZapSign), quando houver */
+  signLinks?: { label: string; url: string }[];
+}) {
   const first = opts.guardianName?.trim().split(/\s+/)[0];
+  if (opts.signLinks?.length) {
+    return (
+      `Olá${first ? `, ${first}` : ""}! Aqui é da ${opts.unitName}. ` +
+      `Precisamos da sua assinatura nos documentos da bolsa da Prefeitura de Niterói de ${opts.studentName} (referente a ${opts.monthLabel}). ` +
+      `É só abrir o link, conferir e assinar na tela do celular:\n` +
+      opts.signLinks.map((l) => `${l.label}: ${l.url}`).join("\n") +
+      (opts.signLinks.length < opts.pending.length ? `\nOs demais documentos (${opts.pending.filter((p) => !opts.signLinks!.some((l) => l.label === p)).join(", ")}) precisam ser assinados na secretaria.` : "") +
+      `\nObrigado!`
+    );
+  }
   return (
     `Olá${first ? `, ${first}` : ""}! Aqui é da ${opts.unitName}. ` +
     `Precisamos da sua assinatura nos documentos da bolsa da Prefeitura de Niterói de ${opts.studentName} ` +

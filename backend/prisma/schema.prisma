@@ -48,6 +48,7 @@ model Unit {
   months         MonthlyReport[]
   users          User[]
   SignedDocument SignedDocument[]
+  SignRequest    SignRequest[]
 
   @@map("units")
 }
@@ -75,6 +76,7 @@ model Student {
   createdAt           DateTime         @default(now()) @map("created_at")
   attendances         Attendance[]
   SignedDocument      SignedDocument[]
+  SignRequest         SignRequest[]
 
   @@index([unitId, name])
   @@map("students")
@@ -120,6 +122,8 @@ enum SignedDocType {
 enum SignMethod {
   PAPEL
   DIGITAL
+  /// Assinado pela plataforma de assinatura (ZapSign): todos os signatários concluíram lá.
+  PLATAFORMA
 }
 
 /// Anexo assinado de uma criança. O Anexo I é por mês (year/month); os
@@ -146,4 +150,28 @@ model SignedDocument {
   @@index([studentId, type])
   @@index([unitId, type, year, month])
   @@map("signed_documents")
+}
+
+/// Pedido de assinatura enviado à plataforma (ZapSign) para um anexo de uma criança.
+model SignRequest {
+  id          String        @id @default(cuid())
+  unitId      String        @map("unit_id")
+  unit        Unit          @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  studentId   String        @map("student_id")
+  student     Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  type        SignedDocType
+  year        Int?
+  month       Int?
+  provider    String        @default("ZAPSIGN")
+  /// token do documento na ZapSign
+  externalId  String        @map("external_id")
+  /// [{ role: "responsável" | "escola", name, url, status, signedAt }]
+  signers     Json
+  /// PENDENTE | ASSINADO | RECUSADO
+  status      String        @default("PENDENTE")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  completedAt DateTime?     @map("completed_at")
+
+  @@index([studentId, type])
+  @@map("sign_requests")
 }
