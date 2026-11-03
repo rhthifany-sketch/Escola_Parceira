@@ -35,6 +35,9 @@ export interface ZapDoc {
   signers: ZapSigner[];
 }
 
+/** Mostra só o começo e o fim do token, pra conferir sem expor. */
+const maskToken = (t: string) => (t.length > 10 ? `${t.slice(0, 4)}…${t.slice(-4)} (${t.length} caracteres)` : `(${t.length} caracteres)`);
+
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const { token, url } = zapsignConfig();
   if (!token) throw new HttpError(400, "ZapSign não configurada (falta ZAPSIGN_API_TOKEN no servidor)");
@@ -51,7 +54,15 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   const text = await res.text();
   if (!res.ok) {
     const detail = text.slice(0, 300);
-    if (res.status === 401 || res.status === 403) throw new HttpError(502, `A ZapSign recusou o token (confira ZAPSIGN_API_TOKEN e se ele é do ambiente certo). ${detail}`);
+    if (res.status === 401 || res.status === 403) {
+      const env = url.includes("sandbox") ? "de TESTES (sandbox)" : "de PRODUÇÃO";
+      const other = url.includes("sandbox") ? "da conta normal (app.zapsign.com.br)" : "da conta de testes (sandbox)";
+      throw new HttpError(
+        502,
+        `A ZapSign recusou o token. O sistema está usando o ambiente ${env} (${url}), e o token cadastrado em ` +
+          `ZAPSIGN_API_TOKEN não existe nesse ambiente — talvez seja ${other}. Token usado: ${maskToken(token)}. ${detail}`
+      );
+    }
     throw new HttpError(502, `A ZapSign respondeu com erro ${res.status}: ${detail}`);
   }
   return (text ? JSON.parse(text) : {}) as T;

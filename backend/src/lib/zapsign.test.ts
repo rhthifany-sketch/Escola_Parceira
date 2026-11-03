@@ -38,7 +38,7 @@ describe("ZapSign", () => {
   it("erro de token vira mensagem clara", async () => {
     process.env.ZAPSIGN_API_TOKEN = "tok";
     vi.stubGlobal("fetch", vi.fn(async () => new Response("unauthorized", { status: 401 })));
-    await expect(getDoc("d")).rejects.toThrow(/recusou o token/);
+    await expect(getDoc("d")).rejects.toThrow(/recusou o token.*TESTES/);
   });
 
   it("situação do pedido", () => {
